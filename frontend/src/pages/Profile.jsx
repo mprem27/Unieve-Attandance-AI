@@ -686,16 +686,6 @@ export default function Profile() {
             rawProfile
           );
 
-        console.log(
-          "Complete profile received:",
-          rawProfile
-        );
-
-        console.log(
-          "Normalized profile:",
-          profileData
-        );
-
         setProfile(
           profileData
         );
@@ -730,11 +720,6 @@ export default function Profile() {
           )
         );
       } catch (err) {
-        console.error(
-          "Profile loading failed:",
-          err
-        );
-
         setError(
           err?.response?.data
             ?.detail ||
@@ -864,11 +849,6 @@ export default function Profile() {
         setSuccess("");
       }, 4000);
     } catch (err) {
-      console.error(
-        "Profile update failed:",
-        err
-      );
-
       setError(
         err?.response?.data
           ?.detail ||

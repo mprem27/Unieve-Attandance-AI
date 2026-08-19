@@ -46,13 +46,9 @@ export default function usePortal() {
           Boolean(data?.configured)
         );
       } catch (err) {
-        console.error(
-          "Unable to load portal credentials:",
-          err
-        );
-
         setError(
           err?.response?.data?.detail ||
+            err?.response?.data?.message ||
             "Unable to load portal settings."
         );
 
@@ -74,14 +70,26 @@ export default function usePortal() {
     password
   ) => {
     const cleanUsername =
-      username?.trim();
+      String(username || "")
+        .trim()
+        .toUpperCase();
 
-    if (!cleanUsername || !password) {
+    const cleanPassword =
+      String(password || "").trim();
+
+    if (!cleanUsername || !cleanPassword) {
       const message =
-        "Portal username and password are required.";
+        "AMS VTU number and password are required.";
 
       setError(message);
+      throw new Error(message);
+    }
 
+    if (!/^VTU\d+$/i.test(cleanUsername)) {
+      const message =
+        "AMS username must be your VTU number, for example VTU26381.";
+
+      setError(message);
       throw new Error(message);
     }
 
@@ -92,7 +100,7 @@ export default function usePortal() {
       const data =
         await updatePortalCredentials({
           portalUsername: cleanUsername,
-          portalPassword: password,
+          portalPassword: cleanPassword,
         });
 
       setPortalUsername(
@@ -101,18 +109,36 @@ export default function usePortal() {
       );
 
       setConfigured(
-        Boolean(data?.configured)
+        Boolean(
+          data?.configured ?? true
+        )
       );
 
       return data;
     } catch (err) {
-      const message =
-        err?.response?.data?.detail ||
+      const detail =
+        err?.response?.data?.detail;
+
+      let message =
         err?.response?.data?.message ||
-        "Unable to save portal credentials.";
+        "Unable to save AMS credentials.";
+
+      if (typeof detail === "string") {
+        message = detail;
+      } else if (Array.isArray(detail)) {
+        message = detail
+          .map((item) =>
+            typeof item === "string"
+              ? item
+              : item?.msg ||
+                item?.message ||
+                ""
+          )
+          .filter(Boolean)
+          .join(", ");
+      }
 
       setError(message);
-
       throw err;
     } finally {
       setSaving(false);

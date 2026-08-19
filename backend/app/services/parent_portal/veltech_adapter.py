@@ -30,7 +30,6 @@ class VeltechAdapter(CollegeDataAdapter):
 
     IDENTIFIERS
     -----------
-
     Parent Portal login:
         VTU26381
 
@@ -41,11 +40,8 @@ class VeltechAdapter(CollegeDataAdapter):
         23UECS1039
 
     IMPORTANT:
-
-        VTU number is used for Parent Portal login.
-
-        Roll / registration number is stored separately
-        and is NEVER sent as Stu_id.
+        VTU26381 MUST be used as Stu_id.
+        23UECS1039 MUST NEVER be used as Stu_id.
     """
 
     LOGIN_PATH = "miniapps/parent_login.php"
@@ -77,10 +73,7 @@ class VeltechAdapter(CollegeDataAdapter):
         except (TypeError, ValueError):
             timeout = 60.0
 
-        self.timeout = max(
-            timeout,
-            30.0,
-        )
+        self.timeout = max(timeout, 30.0)
 
         self.headers = {
             "User-Agent": (
@@ -128,13 +121,16 @@ class VeltechAdapter(CollegeDataAdapter):
             )
 
         # -----------------------------------------------------
-        # Parent Portal uses VTU number.
+        # CRITICAL:
         #
-        # Example:
-        # username   = VTU26381
-        # rollNumber = 23UECS1039
+        # username = VTU26381
+        # vtu_number = 23UECS1039
+        #
+        # Parent Portal MUST receive:
         #
         # Stu_id = VTU26381
+        #
+        # Never send 23UECS1039 as Stu_id.
         # -----------------------------------------------------
 
         parent_vtu = str(
@@ -150,12 +146,12 @@ class VeltechAdapter(CollegeDataAdapter):
                 "Parent Portal VTU number is required."
             )
 
-        if not self._is_vtu_username(
-            parent_vtu
-        ):
+        if not self._is_vtu_username(parent_vtu):
             raise ValueError(
-                "Invalid Parent Portal VTU number."
+                f"Invalid Parent Portal VTU number: "
+                f"{parent_vtu}. Expected format like VTU26381."
             )
+
 
         client = httpx.AsyncClient(
             timeout=httpx.Timeout(
@@ -179,13 +175,13 @@ class VeltechAdapter(CollegeDataAdapter):
                     "Referer": self.base_url + "/",
                 },
             )
-
             login_response.raise_for_status()
 
             login_html = login_response.text
 
+
             # =================================================
-            # 2. EXTRACT LOGIN FORM
+            # 2. EXTRACT FORM
             # =================================================
 
             form_data = self._extract_login_form(
@@ -195,10 +191,11 @@ class VeltechAdapter(CollegeDataAdapter):
             # Parent Portal identifier
             form_data["Stu_id"] = parent_vtu
 
-            # Parent Portal does not use a password.
+            # No password for Parent Portal
             self._remove_password_fields(
                 form_data
             )
+
 
             # =================================================
             # 3. LOGIN
@@ -220,10 +217,10 @@ class VeltechAdapter(CollegeDataAdapter):
                     "Pragma": "no-cache",
                 },
             )
-
             response.raise_for_status()
 
             post_html = response.text
+
 
             # =================================================
             # 4. GET FRESH DASHBOARD
@@ -247,35 +244,32 @@ class VeltechAdapter(CollegeDataAdapter):
                 if not html:
                     continue
 
-                if self._contains_vtu_error(
-                    html
-                ):
+                if self._contains_vtu_error(html):
                     continue
 
                 candidates.append(
                     (
                         source,
                         html,
-                        self._portal_data_score(
-                            html
-                        ),
+                        self._portal_data_score(html),
                     )
                 )
 
             if not candidates:
                 raise RuntimeError(
-                    "Parent Portal did not return "
-                    "a valid student dashboard."
+                    "Parent Portal did not return a valid "
+                    "dashboard for VTU number "
+                    f"{parent_vtu}."
                 )
 
-            _, selected_html, _ = max(
+            source, selected_html, score = max(
                 candidates,
                 key=lambda item: item[2],
             )
 
-            if not self._is_dashboard(
-                selected_html
-            ):
+
+            if not self._is_dashboard(selected_html):
+
                 raise RuntimeError(
                     "Parent Portal response does not "
                     "contain the expected student dashboard."
@@ -302,18 +296,14 @@ class VeltechAdapter(CollegeDataAdapter):
             }
 
         except httpx.TimeoutException as exc:
-            await self._close_client(
-                client
-            )
+            await self._close_client(client)
 
             raise RuntimeError(
                 "Parent Portal request timed out."
             ) from exc
 
         except Exception:
-            await self._close_client(
-                client
-            )
+            await self._close_client(client)
             raise
 
     # =========================================================
@@ -347,10 +337,6 @@ class VeltechAdapter(CollegeDataAdapter):
                 or {}
             )
         except Exception as exc:
-            print(
-                "Parent Portal profile extraction failed:",
-                repr(exc),
-            )
             profile = {}
 
         # =====================================================
@@ -365,10 +351,6 @@ class VeltechAdapter(CollegeDataAdapter):
                 or []
             )
         except Exception as exc:
-            print(
-                "Parent Portal subject extraction failed:",
-                repr(exc),
-            )
             raw_subjects = []
 
         subjects = self._normalize_subjects(
@@ -390,10 +372,6 @@ class VeltechAdapter(CollegeDataAdapter):
             attendance = []
             attendance_error = str(exc)
 
-            print(
-                "Parent Portal attendance extraction failed:",
-                repr(exc),
-            )
 
         # =====================================================
         # TIMETABLE
@@ -407,11 +385,12 @@ class VeltechAdapter(CollegeDataAdapter):
                 or []
             )
         except Exception as exc:
-            print(
-                "Parent Portal timetable extraction failed:",
-                repr(exc),
-            )
             timetable = []
+
+
+        if attendance_error:
+            pass
+
 
         return {
             "success": True,
@@ -574,7 +553,7 @@ class VeltechAdapter(CollegeDataAdapter):
             )
 
         # -----------------------------------------------------
-        # ALWAYS USE VTU NUMBER
+        # ALWAYS USE VTU NUMBER HERE
         # -----------------------------------------------------
 
         parent_vtu = str(
@@ -608,6 +587,7 @@ class VeltechAdapter(CollegeDataAdapter):
             or self._contains_vtu_error(html)
         ):
 
+
             login_response = await client.get(
                 self.login_url,
                 headers={
@@ -623,7 +603,8 @@ class VeltechAdapter(CollegeDataAdapter):
                 )
             )
 
-            # Parent Portal login = VTU number
+            # CRITICAL:
+            # Parent login = VTU number
             form_data["Stu_id"] = parent_vtu
 
             self._remove_password_fields(
@@ -652,9 +633,7 @@ class VeltechAdapter(CollegeDataAdapter):
             html = response.text
 
             # One more fresh dashboard request
-            if not self._is_dashboard(
-                html
-            ):
+            if not self._is_dashboard(html):
                 html = await self._request_dashboard(
                     client,
                     str(response.url),
@@ -664,23 +643,19 @@ class VeltechAdapter(CollegeDataAdapter):
         # VALIDATE DASHBOARD
         # =====================================================
 
-        if self._contains_vtu_error(
-            html
-        ):
+        if self._contains_vtu_error(html):
             raise RuntimeError(
-                "Parent Portal rejected the VTU number."
+                "Parent Portal rejected VTU number "
+                f"{parent_vtu}."
             )
 
-        if self._looks_like_login_page(
-            html
-        ):
+        if self._looks_like_login_page(html):
             raise RuntimeError(
                 "Parent Portal login/session failed."
             )
 
-        if not self._is_dashboard(
-            html
-        ):
+        if not self._is_dashboard(html):
+
             raise RuntimeError(
                 "Parent Portal did not return "
                 "the student dashboard."
@@ -705,9 +680,7 @@ class VeltechAdapter(CollegeDataAdapter):
             "html.parser",
         )
 
-        form = soup.find(
-            "form"
-        )
+        form = soup.find("form")
 
         if not form:
             return {
@@ -716,13 +689,10 @@ class VeltechAdapter(CollegeDataAdapter):
 
         data: dict[str, str] = {}
 
-        for field in form.find_all(
-            "input"
-        ):
+        # Hidden/text inputs
+        for field in form.find_all("input"):
 
-            name = field.get(
-                "name"
-            )
+            name = field.get("name")
 
             if not name:
                 continue
@@ -749,13 +719,12 @@ class VeltechAdapter(CollegeDataAdapter):
                 )
             )
 
+        # Select values
         for select in form.find_all(
             "select"
         ):
 
-            name = select.get(
-                "name"
-            )
+            name = select.get("name")
 
             if not name:
                 continue
@@ -791,9 +760,7 @@ class VeltechAdapter(CollegeDataAdapter):
         data: dict[str, str],
     ) -> None:
 
-        for key in list(
-            data.keys()
-        ):
+        for key in list(data.keys()):
 
             if key.lower() in {
                 "password",
@@ -862,11 +829,8 @@ class VeltechAdapter(CollegeDataAdapter):
                 or []
             )
         except Exception as exc:
-            print(
-                "Parent Portal attendance parser failed:",
-                repr(exc),
-            )
             raw_records = []
+
 
         result = []
 
@@ -997,10 +961,7 @@ class VeltechAdapter(CollegeDataAdapter):
                 )
 
             except Exception as exc:
-                print(
-                    "Skipping invalid attendance record:",
-                    repr(exc),
-                )
+                pass
 
         return self._deduplicate_attendance(
             result
@@ -1063,9 +1024,7 @@ class VeltechAdapter(CollegeDataAdapter):
             if key in seen:
                 continue
 
-            seen.add(
-                key
-            )
+            seen.add(key)
 
             result.append(
                 {
@@ -1082,12 +1041,8 @@ class VeltechAdapter(CollegeDataAdapter):
 
     @staticmethod
     def _deduplicate_attendance(
-        records: list[
-            IncomingAttendanceRecord
-        ],
-    ) -> list[
-        IncomingAttendanceRecord
-    ]:
+        records: list[IncomingAttendanceRecord],
+    ) -> list[IncomingAttendanceRecord]:
 
         unique = {}
 
@@ -1212,11 +1167,9 @@ class VeltechAdapter(CollegeDataAdapter):
         except Exception:
             pass
 
-        text = (
-            VeltechAdapter._page_text(
-                html
-            ).lower()
-        )
+        text = VeltechAdapter._page_text(
+            html
+        ).lower()
 
         for marker in (
             "attendance",
@@ -1298,11 +1251,9 @@ class VeltechAdapter(CollegeDataAdapter):
         if not html:
             return False
 
-        text = (
-            VeltechAdapter._page_text(
-                html
-            ).lower()
-        )
+        text = VeltechAdapter._page_text(
+            html
+        ).lower()
 
         markers = (
             "student details",
@@ -1334,11 +1285,9 @@ class VeltechAdapter(CollegeDataAdapter):
         if not html:
             return False
 
-        text = (
-            VeltechAdapter._page_text(
-                html
-            ).lower()
-        )
+        text = VeltechAdapter._page_text(
+            html
+        ).lower()
 
         return (
             "vtu number is required" in text

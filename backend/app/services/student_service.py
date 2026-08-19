@@ -27,7 +27,7 @@ class StudentService:
         Password = AMS password
 
         Example:
-            VTU26381
+            VTU26381 + AMS password
 
     Parent Portal:
         Username = VTU number
@@ -40,16 +40,14 @@ class StudentService:
         23UECS1039
 
     IMPORTANT:
+        VTU26381 and 23UECS1039 are different values.
 
         portalUsername = VTU26381
-        vtuNumber      = VTU26381
-        rollNumber     = 23UECS1039
+        vtuNumber      = 23UECS1039
+        rollNumber      = 23UECS1039
     """
 
-    def __init__(
-        self,
-        db: Database,
-    ):
+    def __init__(self, db: Database):
         self.db = db
         self.ams_adapter = AmsAdapter()
         self.parent_adapter = VeltechAdapter()
@@ -66,10 +64,7 @@ class StudentService:
     # ACTIVE STUDENTS
     # =========================================================
 
-    def active_students(
-        self,
-    ) -> list[dict]:
-
+    def active_students(self) -> list[dict]:
         students = (
             self.db[USERS]
             .find(
@@ -78,10 +73,7 @@ class StudentService:
                     "active": True,
                 }
             )
-            .sort(
-                "name",
-                1,
-            )
+            .sort("name", 1)
         )
 
         return [
@@ -120,9 +112,7 @@ class StudentService:
                 "Student not found or inactive."
             )
 
-        return serialize_document(
-            student
-        )
+        return serialize_document(student)
 
     # =========================================================
     # GET RAW STUDENT
@@ -177,64 +167,69 @@ class StudentService:
         return str(value)
 
     # =========================================================
-    # PORTAL USERNAME
+    # VTU LOGIN NUMBER
     # =========================================================
+    # THIS IS THE VALUE USED BY:
     #
-    # BOTH:
+    # AMS LOGIN
+    # Parent Portal LOGIN
     #
-    # AMS
-    # Parent Portal
-    #
-    # use:
-    #
-    #     VTU26381
-    #
-    # NEVER use:
-    #
-    #     23UECS1039
+    # Example:
+    # VTU26381
     # =========================================================
 
     @staticmethod
     def _portal_username(
         student: dict,
     ) -> str:
+        """
+        VTU login number used by both AMS and Parent Portal.
+        Example: VTU26381.
+        """
+        value = str(
+            student.get("portalUsername")
+            or student.get("portal_username")
+            or ""
+        ).strip().upper()
 
-        candidates = (
-            student.get("portalUsername"),
-            student.get("portal_username"),
-            student.get("vtuNumber"),
-        )
-
-        for candidate in candidates:
-
-            value = str(
-                candidate or ""
+        # Repair older records where VTU login was stored in vtuNumber.
+        if not value:
+            candidate = str(
+                student.get("vtuNumber")
+                or ""
             ).strip().upper()
 
-            if re_match_vtu(value):
-                return value
+            if re_match_vtu(candidate):
+                value = candidate
 
-        return ""
+        return value
 
     # =========================================================
     # COLLEGE ROLL / REGISTRATION NUMBER
+    # =========================================================
+    #
+    # Example:
+    # 23UECS1039
+    #
+    # NEVER use this for Parent Portal login.
     # =========================================================
 
     @staticmethod
     def _vtu_number(
         student: dict,
     ) -> str:
+        """
+        College roll/registration number.
+        Example: 23UECS1039.
 
-        candidates = (
+        VTU26381 must never be treated as this value.
+        """
+        for value in (
             student.get("rollNumber"),
             student.get("registrationNumber"),
-        )
-
-        for candidate in candidates:
-
-            value = str(
-                candidate or ""
-            ).strip().upper()
+            student.get("vtuNumber"),
+        ):
+            value = str(value or "").strip().upper()
 
             if value and not re_match_vtu(value):
                 return value
@@ -330,16 +325,13 @@ class StudentService:
 
                 if stored:
 
-                    stored_username = (
-                        self._portal_username(
-                            stored
+                    username = str(
+                        stored.get(
+                            "portalUsername",
+                            username,
                         )
-                    )
-
-                    if stored_username:
-                        username = (
-                            stored_username
-                        )
+                        or username
+                    ).strip().upper()
 
                     encrypted_password = (
                         stored.get(
@@ -359,15 +351,10 @@ class StudentService:
             return None
 
         try:
-
-            password = (
-                decrypt_portal_password(
-                    encrypted_password
-                )
+            password = decrypt_portal_password(
+                encrypted_password
             )
-
         except Exception as exc:
-
             raise ValueError(
                 "Unable to decrypt the AMS password."
             ) from exc
@@ -390,16 +377,13 @@ class StudentService:
     ) -> bool:
 
         try:
-
             return (
                 self._get_ams_credentials(
                     student
                 )
                 is not None
             )
-
         except Exception:
-
             return False
 
     # =========================================================
@@ -438,11 +422,13 @@ class StudentService:
 
                 if stored:
 
-                    username = (
-                        self._portal_username(
-                            stored
+                    username = str(
+                        stored.get(
+                            "portalUsername",
+                            username,
                         )
-                    )
+                        or username
+                    ).strip().upper()
 
                     encrypted_password = (
                         stored.get(
@@ -501,6 +487,7 @@ class StudentService:
 
         username, password = credentials
 
+
         return await self.ams_adapter.login(
             username=username,
             password=password,
@@ -508,6 +495,19 @@ class StudentService:
 
     # =========================================================
     # PARENT PORTAL LOGIN
+    # =========================================================
+    #
+    # CRITICAL:
+    #
+    # Parent Portal login:
+    #
+    #     username = VTU26381
+    #     password = ""
+    #
+    # NOT:
+    #
+    #     username = 23UECS1039
+    #
     # =========================================================
 
     async def _login_parent_portal(
@@ -526,6 +526,8 @@ class StudentService:
                 "Parent Portal VTU number is missing."
             )
 
+        parent_vtu = parent_vtu.upper()
+
         if not self._looks_like_portal_username(
             parent_vtu
         ):
@@ -540,6 +542,7 @@ class StudentService:
                 student
             )
         )
+
 
         return await self.parent_adapter.login(
             username=parent_vtu,
@@ -781,17 +784,23 @@ class StudentService:
             )
 
             if value is not None:
-
                 normalized[target] = str(
                     value
                 ).strip()
 
-        # =====================================================
-        # ROLL / REGISTRATION NUMBER
-        # =====================================================
+        # -----------------------------------------------------
+        # COLLEGE ROLL / REGISTRATION NUMBER
+        #
+        # Example:
+        # 23UECS1039
+        #
+        # Never put VTU26381 here.
+        # -----------------------------------------------------
 
         roll_number = self._first_value(
             source,
+            "vtuNumber",
+            "vtuNo",
             "rollNumber",
             "rollNo",
             "registrationNumber",
@@ -818,11 +827,11 @@ class StudentService:
             ):
 
                 normalized[
-                    "rollNumber"
+                    "vtuNumber"
                 ] = roll_number
 
                 normalized[
-                    "vtuNumber"
+                    "rollNumber"
                 ] = roll_number
 
         phone = normalized.get(
@@ -853,13 +862,10 @@ class StudentService:
         )
 
         try:
-
             object_id = ObjectId(
                 str(student_id)
             )
-
         except Exception as exc:
-
             raise ValueError(
                 "Invalid student ID."
             ) from exc
@@ -873,7 +879,6 @@ class StudentService:
         )
 
         if not existing:
-
             raise ValueError(
                 "Student not found while "
                 "saving AMS profile."
@@ -919,21 +924,23 @@ class StudentService:
                 None,
             )
 
+        now = self._now()
+
         normalized[
             "profileSynced"
         ] = True
 
         normalized[
             "lastSyncedAt"
-        ] = self._now()
+        ] = now
 
         normalized[
             "profileLastSyncedAt"
-        ] = self._now()
+        ] = now
 
         normalized[
             "updatedAt"
-        ] = self._now()
+        ] = now
 
         self.db[USERS].update_one(
             {
@@ -953,7 +960,6 @@ class StudentService:
         )
 
         if not updated:
-
             raise ValueError(
                 "Student could not be reloaded "
                 "after AMS synchronization."
@@ -962,55 +968,6 @@ class StudentService:
         return serialize_document(
             updated
         )
-
-    # =========================================================
-    # CHECK WHETHER PROFILE DATA IS MISSING
-    # =========================================================
-
-    @staticmethod
-    def _profile_needs_fetch(
-        student: dict,
-    ) -> bool:
-        """
-        Fetch AMS profile only when important student
-        profile information is missing.
-
-        Existing profile information is preserved.
-        """
-
-        required_profile_fields = (
-            "name",
-            "gender",
-            "fatherName",
-            "motherName",
-            "dateOfBirth",
-            "degree",
-            "branch",
-            "community",
-            "religion",
-            "nationality",
-            "aadhaarNumber",
-            "academicBankCreditsId",
-            "phoneNumber",
-            "photoUrl",
-        )
-
-        for field in required_profile_fields:
-
-            value = student.get(
-                field
-            )
-
-            if value is None:
-                return True
-
-            if isinstance(
-                value,
-                str,
-            ) and not value.strip():
-                return True
-
-        return False
 
     # =========================================================
     # CURRENT AMS PROFILE
@@ -1043,11 +1000,9 @@ class StudentService:
             if session:
 
                 try:
-
                     await self.ams_adapter.logout(
                         session
                     )
-
                 except Exception:
                     pass
 
@@ -1058,62 +1013,11 @@ class StudentService:
     async def sync_student_profile(
         self,
         student_id: str,
-        force: bool = False,
     ) -> dict:
-        """
-        Fetch AMS profile only when required.
-
-        force=True:
-            Always fetch fresh AMS profile.
-
-        force=False:
-            Fetch only when important profile fields
-            are missing.
-
-        This prevents unnecessary AMS requests while
-        preserving the existing live portal flow.
-        """
 
         student = self._get_student(
             student_id
         )
-
-        # =====================================================
-        # EXISTING PROFILE
-        # =====================================================
-
-        if (
-            not force
-            and not self._profile_needs_fetch(
-                student
-            )
-        ):
-
-            return {
-                "success": True,
-                "fetched": False,
-                "message": (
-                    "Student profile already exists. "
-                    "AMS fetch skipped."
-                ),
-                "vtuNumber": student.get(
-                    "vtuNumber"
-                ),
-                "rollNumber": student.get(
-                    "rollNumber"
-                ),
-                "parentPortalUsername": (
-                    self._portal_username(
-                        student
-                    )
-                ),
-                "profile": student,
-                "student": student,
-            }
-
-        # =====================================================
-        # CHECK AMS CREDENTIALS
-        # =====================================================
 
         credentials = (
             self._get_ams_credentials(
@@ -1122,15 +1026,10 @@ class StudentService:
         )
 
         if credentials is None:
-
             raise ValueError(
                 "AMS username and password "
                 "have not been configured."
             )
-
-        # =====================================================
-        # LIVE AMS FETCH
-        # =====================================================
 
         profile = (
             await self.get_current_profile(
@@ -1139,15 +1038,10 @@ class StudentService:
         )
 
         if not profile:
-
             raise ValueError(
                 "AMS login succeeded, but "
                 "no student profile data was returned."
             )
-
-        # =====================================================
-        # SAVE PROFILE
-        # =====================================================
 
         updated_student = (
             self._save_ams_profile(
@@ -1156,43 +1050,26 @@ class StudentService:
             )
         )
 
-        # =====================================================
-        # ALWAYS PRESERVE VTU LOGIN
-        # =====================================================
-
+        # Keep Parent Portal login identity separate from the
+        # college roll/registration number after AMS synchronization.
         portal_username = (
-            self._portal_username(
-                updated_student
-            )
-            or self._portal_username(
-                student
-            )
+            self._portal_username(updated_student)
+            or self._portal_username(student)
         )
 
         if portal_username:
-
             self.db[USERS].update_one(
-                {
-                    "_id": ObjectId(
-                        str(student_id)
-                    )
-                },
+                {"_id": ObjectId(str(student_id))},
                 {
                     "$set": {
-                        "portalUsername": (
-                            portal_username
-                        )
+                        "portalUsername": portal_username,
                     }
                 },
             )
-
-            updated_student[
-                "portalUsername"
-            ] = portal_username
+            updated_student["portalUsername"] = portal_username
 
         return {
             "success": True,
-            "fetched": True,
             "message": (
                 "Student profile fetched "
                 "from AMS successfully."
@@ -1234,17 +1111,10 @@ class StudentService:
         }
 
         # =====================================================
-        # AMS PROFILE
+        # OPTIONAL AMS PROFILE SYNC
         # =====================================================
 
-        should_fetch_ams = (
-            fetch_ams_profile
-            or self._profile_needs_fetch(
-                student
-            )
-        )
-
-        if should_fetch_ams:
+        if fetch_ams_profile:
 
             try:
 
@@ -1255,7 +1125,6 @@ class StudentService:
                 )
 
                 if not student_id:
-
                     raise ValueError(
                         "Student ID is missing."
                     )
@@ -1349,7 +1218,7 @@ class StudentService:
                 pass
 
         # =====================================================
-        # PARENT PORTAL VTU
+        # PARENT PORTAL LOGIN ID
         # =====================================================
 
         parent_vtu = (
@@ -1384,6 +1253,7 @@ class StudentService:
                 )
             )
 
+
             portal_data = (
                 await self.parent_adapter
                 .get_live_portal_data(
@@ -1395,7 +1265,6 @@ class StudentService:
                 portal_data,
                 dict,
             ):
-
                 raise ValueError(
                     "Parent Portal adapter "
                     "returned an invalid response."
@@ -1438,28 +1307,29 @@ class StudentService:
                 )
             )
 
+            # Login success alone is not attendance success.
+            # The Parent Portal must return actual current rows.
             result["success"] = bool(
                 result["subjects"]
                 or result["attendance"]
             )
 
-            if not result["subjects"]:
 
+            if not result["subjects"]:
                 result["attendanceError"] = (
                     result["attendanceError"]
                     or
-                    "Parent Portal login succeeded, "
-                    "but no current subject rows "
-                    "were returned."
+                    "Parent Portal login succeeded, but "
+                    "no current subject rows were returned."
                 )
 
-            if not result["attendance"]:
 
+            if not result["attendance"]:
                 result["attendanceError"] = (
                     result["attendanceError"]
                     or
-                    "Parent Portal returned zero "
-                    "attendance records."
+                    "Parent Portal returned "
+                    "zero attendance records."
                 )
 
         except Exception as exc:
@@ -1473,36 +1343,18 @@ class StudentService:
                 f"failed: {exc}"
             )
 
-            print()
-            print(
-                "========================================"
-            )
-            print(
-                "PARENT PORTAL SYNCHRONIZATION ERROR"
-            )
-            print(
-                repr(exc)
-            )
-            print(
-                "========================================"
-            )
 
         finally:
 
             if session:
 
                 try:
-
                     await self.parent_adapter.logout(
                         session
                     )
-
                 except Exception as exc:
 
-                    print(
-                        "Parent Portal logout warning:",
-                        repr(exc),
-                    )
+                    pass
 
         return result
 
@@ -1594,11 +1446,7 @@ class StudentService:
 
                 except Exception as exc:
 
-                    print(
-                        "Skipping malformed "
-                        "attendance record:",
-                        repr(exc),
-                    )
+                    pass
 
         return (
             valid_records,

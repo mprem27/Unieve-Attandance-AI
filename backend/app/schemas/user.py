@@ -2,11 +2,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, model_validator
 
-
-# =========================================================
-# ADMIN CREATE USER
-# =========================================================
-
 class UserCreate(BaseModel):
     name: str = Field(
         ...,
@@ -20,10 +15,6 @@ class UserCreate(BaseModel):
         max_length=200,
     )
 
-    # =====================================================
-    # APPLICATION LOGIN PASSWORD
-    # =====================================================
-
     temporaryPassword: str = Field(
         ...,
         min_length=8,
@@ -32,27 +23,15 @@ class UserCreate(BaseModel):
 
     role: str = "student"
 
-    # =====================================================
-    # STUDENT IDENTIFICATION
-    # =====================================================
-
-    # Example:
-    # VTU26381
     vtuNumber: str | None = Field(
         default=None,
         max_length=100,
     )
 
-    # Example:
-    # 23UECS1039
     rollNumber: str | None = Field(
         default=None,
         max_length=100,
     )
-
-    # =====================================================
-    # PERSONAL INFORMATION
-    # =====================================================
 
     gender: str | None = Field(
         default=None,
@@ -94,10 +73,6 @@ class UserCreate(BaseModel):
         max_length=100,
     )
 
-    # =====================================================
-    # GOVERNMENT / ACADEMIC IDENTIFICATION
-    # =====================================================
-
     aadhaarNumber: str | None = Field(
         default=None,
         max_length=20,
@@ -107,26 +82,6 @@ class UserCreate(BaseModel):
         default=None,
         max_length=50,
     )
-
-    # =====================================================
-    # AMS / COLLEGE PORTAL
-    # =====================================================
-
-    # IMPORTANT:
-    #
-    # AMS credentials are OPTIONAL during admin
-    # student creation.
-    #
-    # If the admin does not provide them:
-    #
-    #     portalUsername = None
-    #     portalPassword = None
-    #
-    # The student can configure AMS later from
-    # the student login.
-    #
-    # NO DEFAULT PASSWORD IS CREATED.
-    # =====================================================
 
     portalUsername: str | None = Field(
         default=None,
@@ -138,10 +93,6 @@ class UserCreate(BaseModel):
         min_length=1,
         max_length=200,
     )
-
-    # =====================================================
-    # CONTACT
-    # =====================================================
 
     phoneNumber: str | None = Field(
         default=None,
@@ -158,10 +109,6 @@ class UserCreate(BaseModel):
         max_length=30,
     )
 
-    # =====================================================
-    # ACADEMIC
-    # =====================================================
-
     branch: str | None = Field(
         default=None,
         max_length=150,
@@ -172,28 +119,12 @@ class UserCreate(BaseModel):
     section: str | None = None
     batch: str | None = None
 
-    # =====================================================
-    # PHOTO
-    # =====================================================
-
     photoUrl: str | None = None
-
-    # =====================================================
-    # NOTIFICATIONS
-    # =====================================================
 
     smsEnabled: bool = True
     notificationsEnabled: bool = True
 
-    # =====================================================
-    # ACCOUNT
-    # =====================================================
-
     active: bool = True
-
-    # =====================================================
-    # VALIDATE PORTAL USERNAME
-    # =====================================================
 
     @model_validator(mode="after")
     def validate_portal_username(self):
@@ -214,10 +145,6 @@ class UserCreate(BaseModel):
         student creation.
         """
 
-        # -------------------------------------------------
-        # NORMALIZE VTU NUMBER
-        # -------------------------------------------------
-
         if self.vtuNumber:
 
             vtu = (
@@ -227,10 +154,6 @@ class UserCreate(BaseModel):
             )
 
             self.vtuNumber = vtu
-
-            # -------------------------------------------------
-            # VALIDATE PORTAL USERNAME ONLY IF PROVIDED
-            # -------------------------------------------------
 
             if self.portalUsername:
 
@@ -248,10 +171,6 @@ class UserCreate(BaseModel):
 
                 self.portalUsername = vtu
 
-        # -------------------------------------------------
-        # IF NO VTU NUMBER, DO NOT CREATE A PORTAL USERNAME
-        # -------------------------------------------------
-
         elif self.portalUsername:
 
             self.portalUsername = (
@@ -261,11 +180,6 @@ class UserCreate(BaseModel):
             )
 
         return self
-
-
-# =========================================================
-# ADMIN UPDATE USER
-# =========================================================
 
 class UserUpdate(BaseModel):
     name: str | None = Field(
@@ -280,10 +194,6 @@ class UserUpdate(BaseModel):
         max_length=200,
     )
 
-    # =====================================================
-    # STUDENT IDENTIFICATION
-    # =====================================================
-
     vtuNumber: str | None = Field(
         default=None,
         max_length=100,
@@ -293,10 +203,6 @@ class UserUpdate(BaseModel):
         default=None,
         max_length=100,
     )
-
-    # =====================================================
-    # PERSONAL INFORMATION
-    # =====================================================
 
     gender: str | None = Field(
         default=None,
@@ -338,10 +244,6 @@ class UserUpdate(BaseModel):
         max_length=100,
     )
 
-    # =====================================================
-    # GOVERNMENT / ACADEMIC IDENTIFICATION
-    # =====================================================
-
     aadhaarNumber: str | None = Field(
         default=None,
         max_length=20,
@@ -352,33 +254,16 @@ class UserUpdate(BaseModel):
         max_length=50,
     )
 
-    # =====================================================
-    # AMS / COLLEGE PORTAL
-    # =====================================================
-
-    # AMS username is normally derived from vtuNumber.
-
     portalUsername: str | None = Field(
         default=None,
         max_length=100,
     )
-
-    # AMS password is optional during normal
-    # student profile updates.
-    #
-    # If provided, UserService can update it.
-    #
-    # If omitted, the existing password remains unchanged.
 
     portalPassword: str | None = Field(
         default=None,
         min_length=1,
         max_length=200,
     )
-
-    # =====================================================
-    # CONTACT
-    # =====================================================
 
     phoneNumber: str | None = Field(
         default=None,
@@ -395,10 +280,6 @@ class UserUpdate(BaseModel):
         max_length=30,
     )
 
-    # =====================================================
-    # ACADEMIC
-    # =====================================================
-
     branch: str | None = Field(
         default=None,
         max_length=150,
@@ -409,28 +290,12 @@ class UserUpdate(BaseModel):
     section: str | None = None
     batch: str | None = None
 
-    # =====================================================
-    # PHOTO
-    # =====================================================
-
     photoUrl: str | None = None
-
-    # =====================================================
-    # NOTIFICATIONS
-    # =====================================================
 
     smsEnabled: bool | None = None
     notificationsEnabled: bool | None = None
 
-    # =====================================================
-    # ACCOUNT
-    # =====================================================
-
     active: bool | None = None
-
-    # =====================================================
-    # VALIDATE PORTAL USERNAME
-    # =====================================================
 
     @model_validator(mode="after")
     def validate_portal_username(self):
@@ -477,19 +342,9 @@ class UserUpdate(BaseModel):
 
         return self
 
-
-# =========================================================
-# STUDENT PROFILE UPDATE
-# =========================================================
-
 class ProfileUpdate(BaseModel):
     smsEnabled: bool | None = None
     notificationsEnabled: bool | None = None
-
-
-# =========================================================
-# PORTAL CREDENTIALS UPDATE
-# =========================================================
 
 class PortalCredentialsUpdate(BaseModel):
     """
@@ -527,9 +382,8 @@ class PortalCredentialsUpdate(BaseModel):
     The AMS password is NEVER returned to the frontend.
     """
 
-    portalUsername: str = Field(
-        ...,
-        min_length=1,
+    portalUsername: str | None = Field(
+        default=None,
         max_length=100,
     )
 
@@ -541,33 +395,13 @@ class PortalCredentialsUpdate(BaseModel):
 
     @model_validator(mode="after")
     def normalize_username(self):
-
-        self.portalUsername = (
-            self.portalUsername
-            .strip()
-            .upper()
-        )
-
-        if not self.portalUsername:
-            raise ValueError(
-                "AMS VTU number is required."
-            )
-
+        if self.portalUsername:
+            self.portalUsername = self.portalUsername.strip().upper()
         return self
-
-
-# =========================================================
-# PORTAL CREDENTIAL STATUS
-# =========================================================
 
 class PortalCredentialsPublic(BaseModel):
     configured: bool
     portalUsername: str | None = None
-
-
-# =========================================================
-# PUBLIC USER
-# =========================================================
 
 class UserPublic(BaseModel):
     id: str
@@ -576,16 +410,8 @@ class UserPublic(BaseModel):
     email: str
     role: str
 
-    # =====================================================
-    # STUDENT IDENTIFICATION
-    # =====================================================
-
     vtuNumber: str | None = None
     rollNumber: str | None = None
-
-    # =====================================================
-    # PERSONAL INFORMATION
-    # =====================================================
 
     gender: str | None = None
     fatherName: str | None = None
@@ -596,35 +422,16 @@ class UserPublic(BaseModel):
     religion: str | None = None
     nationality: str | None = None
 
-    # =====================================================
-    # GOVERNMENT / ACADEMIC IDENTIFICATION
-    # =====================================================
-
     aadhaarNumber: str | None = None
     academicBankCreditsId: str | None = None
-
-    # =====================================================
-    # AMS / COLLEGE PORTAL
-    # =====================================================
-
-    # Username may be visible.
-    # Password is NEVER part of UserPublic.
 
     portalUsername: str | None = None
 
     portalCredentialsConfigured: bool = False
 
-    # =====================================================
-    # CONTACT
-    # =====================================================
-
     phoneNumber: str | None = None
     parentName: str | None = None
     parentPhone: str | None = None
-
-    # =====================================================
-    # ACADEMIC
-    # =====================================================
 
     branch: str | None = None
     year: str | None = None
@@ -632,29 +439,13 @@ class UserPublic(BaseModel):
     section: str | None = None
     batch: str | None = None
 
-    # =====================================================
-    # PHOTO
-    # =====================================================
-
     photoUrl: str | None = None
-
-    # =====================================================
-    # NOTIFICATIONS
-    # =====================================================
 
     smsEnabled: bool = True
     notificationsEnabled: bool = True
 
-    # =====================================================
-    # ACCOUNT
-    # =====================================================
-
     active: bool = True
     forcePasswordChange: bool = False
-
-    # =====================================================
-    # PORTAL SYNCHRONIZATION
-    # =====================================================
 
     portalSynced: bool = False
 

@@ -7,14 +7,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pymongo.database import Database
 
 from app.config.database import get_db
-
 from app.models.attendance import ATTENDANCE_RECORDS
 from app.models.attendance_change import ATTENDANCE_CHANGES
 from app.models.audit_log import AUDIT_LOGS
 from app.models.notification import NOTIFICATIONS, SMS_LOGS
 from app.models.subject import SUBJECTS
 from app.models.timetable import TIMETABLE
-
 from app.schemas.admin import (
     AdminAttendanceCreate,
     AdminAttendanceUpdate,
@@ -24,30 +22,15 @@ from app.schemas.admin import (
     AdminTimetableCreate,
     AdminTimetableUpdate,
 )
-
-from app.schemas.attendance import (
-    SyncRequest,
-    SyncResult,
-)
-
-from app.schemas.user import (
-    UserCreate,
-    UserPublic,
-    UserUpdate,
-)
-
+from app.schemas.attendance import SyncRequest, SyncResult
+from app.schemas.user import UserCreate, UserPublic, UserUpdate
 from app.security.permissions import require_admin
-
 from app.services.auth_service import AuthService
 from app.services.attendance_service import AttendanceService
 from app.services.base import serialize_document
 from app.services.student_service import StudentService
 from app.services.user_service import UserService
-
-from app.scheduler.attendance_sync import (
-    AttendanceSyncRunner,
-)
-
+from app.scheduler.attendance_sync import AttendanceSyncRunner
 
 router = APIRouter(
     prefix="/admin",
@@ -59,21 +42,11 @@ router = APIRouter(
 # HELPERS
 # =========================================================
 
-
 def _extract_id(document: Any) -> str | None:
-    """
-    Safely extract MongoDB ID.
-
-    Supports both:
-        id
-        _id
-    """
-
     if not document:
         return None
 
     if isinstance(document, dict):
-
         value = document.get("id")
 
         if value is not None:
@@ -87,16 +60,11 @@ def _extract_id(document: Any) -> str | None:
     return None
 
 
-def _ensure_student_id(
-    student: dict,
-) -> str | None:
-
+def _ensure_student_id(student: dict) -> str | None:
     if not student:
         return None
 
-    student_id = _extract_id(
-        student
-    )
+    student_id = _extract_id(student)
 
     if student_id:
         student["id"] = student_id
@@ -104,13 +72,7 @@ def _ensure_student_id(
     return student_id
 
 
-def _clean_response(
-    value: Any,
-):
-    """
-    Convert MongoDB documents/ObjectIds into JSON-safe data.
-    """
-
+def _clean_response(value: Any):
     try:
         return serialize_document(value)
     except Exception:
@@ -120,7 +82,6 @@ def _clean_response(
 # =========================================================
 # USERS
 # =========================================================
-
 
 @router.get(
     "/users",
@@ -137,7 +98,6 @@ def list_users(
 # GET SINGLE USER
 # =========================================================
 
-
 @router.get(
     "/users/{user_id}",
     response_model=UserPublic,
@@ -147,15 +107,101 @@ def get_user(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-    return UserService(db).get_user(
-        user_id
+    return UserService(db).get_user(user_id)
+
+
+# =========================================================
+# USER-BASED STUDENT DATA COMPATIBILITY ROUTES
+# =========================================================
+
+@router.get(
+    "/users/{student_id}/attendance",
+)
+def user_student_attendance(
+    student_id: str,
+    _admin: dict = Depends(require_admin),
+    db: Database = Depends(get_db),
+):
+    return AttendanceService(db).list_records(student_id)
+
+
+@router.get(
+    "/users/{student_id}/attendance/summary",
+)
+def user_student_attendance_summary(
+    student_id: str,
+    _admin: dict = Depends(require_admin),
+    db: Database = Depends(get_db),
+):
+    return AttendanceService(db).summary(student_id)
+
+
+@router.get(
+    "/users/{student_id}/attendance/changes",
+)
+def user_student_attendance_changes(
+    student_id: str,
+    _admin: dict = Depends(require_admin),
+    db: Database = Depends(get_db),
+):
+    return AttendanceService(db).list_changes(student_id)
+
+
+@router.get(
+    "/users/{student_id}/subjects",
+)
+def user_student_subjects(
+    student_id: str,
+    _admin: dict = Depends(require_admin),
+    db: Database = Depends(get_db),
+):
+    return StudentService(db).get_student_associated_subjects(student_id)
+
+
+@router.get(
+    "/users/{student_id}/timetable",
+)
+def user_student_timetable(
+    student_id: str,
+    _admin: dict = Depends(require_admin),
+    db: Database = Depends(get_db),
+):
+    records = (
+        db[TIMETABLE]
+        .find({"studentId": student_id})
+        .sort([("day", 1), ("startTime", 1)])
     )
+
+    return [
+        serialize_document(record)
+        for record in records
+    ]
+
+
+@router.get(
+    "/users/{student_id}/notifications",
+)
+def user_student_notifications(
+    student_id: str,
+    _admin: dict = Depends(require_admin),
+    db: Database = Depends(get_db),
+):
+    notifications = (
+        db[NOTIFICATIONS]
+        .find({"studentId": student_id})
+        .sort("createdAt", -1)
+        .limit(100)
+    )
+
+    return [
+        serialize_document(notification)
+        for notification in notifications
+    ]
 
 
 # =========================================================
 # CREATE USER
 # =========================================================
-
 
 @router.post(
     "/users",
@@ -167,246 +213,93 @@ async def create_user(
     db: Database = Depends(get_db),
 ):
     """
-    CREATE STUDENT ONLY.
+    Create a student without requiring AMS credentials.
 
-    IMPORTANT:
+    AMS credentials are optional during creation.
 
-    AMS credentials are OPTIONAL.
+    If AMS credentials are supplied:
+        - VTU number is the AMS username.
+        - Credentials are validated before creation.
+        - Valid credentials are stored by UserService.
+        - The frontend can start synchronization afterward.
 
-    If portalPassword is empty:
-        - create the student normally
-        - do not contact AMS
-        - do not create a fake/default AMS password
-
-    If portalPassword is supplied:
-        - UserService validates the AMS credentials
-        - valid credentials are encrypted and stored
-
-    This endpoint NEVER starts Parent Portal
-    synchronization.
-
-    Portal synchronization must happen through:
-
-        POST /admin/students/{student_id}/sync-profile
+    If AMS credentials are not supplied:
+        - Student is still created.
+        - No AMS synchronization is started.
+        - Student can configure AMS later from student login.
     """
 
     user_service = UserService(db)
 
     try:
-
-        # -----------------------------------------------------
-        # CREATE USER
-        # -----------------------------------------------------
-        #
-        # UserService.create_user() is asynchronous because
-        # AMS credentials may require live AMS validation.
-        #
-        # IMPORTANT:
-        # await is required here.
-        # -----------------------------------------------------
-
         created_student = await user_service.create_user(
             payload
         )
 
-        # -----------------------------------------------------
-        # SERIALIZE
-        # -----------------------------------------------------
+        student = serialize_document(
+            created_student
+        )
 
-        if isinstance(
-            created_student,
-            dict,
-        ):
-
-            student = serialize_document(
-                created_student
-            )
-
-        else:
-
-            student = created_student
-
-        # -----------------------------------------------------
-        # VALIDATE RESPONSE
-        # -----------------------------------------------------
-
-        if not isinstance(
-            student,
-            dict,
-        ):
-
+        if not isinstance(student, dict):
             raise RuntimeError(
-                "UserService returned an invalid "
-                "student object."
+                "UserService returned an invalid student object."
             )
-
-        # -----------------------------------------------------
-        # GET ID
-        # -----------------------------------------------------
 
         student_id = _ensure_student_id(
             student
         )
 
-        # -----------------------------------------------------
-        # FALLBACK LOOKUP
-        # -----------------------------------------------------
-
-        if (
-            not student_id
-            and student.get("email")
-        ):
-
-            found_student = (
-                db["users"].find_one(
-                    {
-                        "email": student[
-                            "email"
-                        ]
-                    }
-                )
+        if not student_id and student.get("email"):
+            found_student = db["users"].find_one(
+                {
+                    "email": student["email"]
+                }
             )
 
             if found_student:
-
                 student = serialize_document(
                     found_student
                 )
-
                 student_id = _ensure_student_id(
                     student
                 )
 
-        # -----------------------------------------------------
-        # VERIFY ID
-        # -----------------------------------------------------
-
         if not student_id:
-
             raise RuntimeError(
-                "Student was created but the "
-                "student ID could not be determined."
+                "Student was created but the student ID "
+                "could not be determined."
             )
 
-        # -----------------------------------------------------
-        # LOG
-        # -----------------------------------------------------
-
-        print("")
-        print(
-            "========================================"
-        )
-        print(
-            "STUDENT CREATED"
-        )
-        print(
-            f"Student ID: {student_id}"
-        )
-        print(
-            f"Name: {student.get('name', '-')}"
-        )
-        print(
-            f"Email: {student.get('email', '-')}"
-        )
-        print(
-            "Portal Username:",
+        ams_configured = bool(
             student.get(
-                "portalUsername",
-                "-",
-            ),
+                "portalCredentialsConfigured",
+                False,
+            )
         )
-        print(
-            "AMS Credentials:",
-            (
-                "Configured"
-                if student.get(
-                    "portalCredentialsConfigured",
-                    False,
-                )
-                else "Not configured"
-            ),
-        )
-        print(
-            "========================================"
-        )
-        print("")
-
-        # -----------------------------------------------------
-        # RESPONSE
-        # -----------------------------------------------------
 
         return {
             "success": True,
-
             "message": (
                 "Student account created successfully."
             ),
-
             "studentId": student_id,
-
             "id": student_id,
-
             "student": student,
-
+            "amsConfigured": ams_configured,
             "syncRequired": (
-                student.get(
-                    "role"
-                ) == "student"
+                student.get("role") == "student"
+                and ams_configured
             ),
-
             "syncEndpoint": (
-                "/api/v1/admin/students/"
+                f"/api/v1/admin/students/"
                 f"{student_id}/sync-profile"
             ),
         }
 
-    # =========================================================
-    # EXPECTED APPLICATION ERRORS
-    # =========================================================
-
     except HTTPException:
-        """
-        IMPORTANT:
-
-        Preserve HTTP errors.
-
-        Examples:
-
-            Invalid AMS credentials
-                -> HTTP 400
-
-            Duplicate email
-                -> HTTP 409
-
-            Duplicate VTU
-                -> HTTP 409
-
-        These must reach the frontend unchanged.
-        """
-
         raise
 
-    # =========================================================
-    # UNEXPECTED ERRORS
-    # =========================================================
-
     except Exception as exc:
-
-        print("")
-        print(
-            "========================================"
-        )
-        print(
-            "CREATE USER ERROR"
-        )
-        print(
-            repr(exc)
-        )
-        print(
-            "========================================"
-        )
-        print("")
-
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
@@ -416,7 +309,6 @@ async def create_user(
 # =========================================================
 # UPDATE USER
 # =========================================================
-
 
 @router.put(
     "/users/{user_id}",
@@ -428,96 +320,15 @@ async def update_user(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-    """
-    Update an existing student.
-
-    IMPORTANT:
-
-    UserService.update_user() is asynchronous because
-    AMS credential changes may require live AMS validation.
-
-    Therefore this route MUST await the service.
-
-    AMS behavior:
-
-        No AMS password supplied
-            -> update normal student information
-            -> existing AMS credentials remain unchanged
-
-        AMS password supplied
-            -> validate against AMS
-            -> valid: update encrypted credentials
-            -> invalid: return HTTP 400
-
-    HTTP 400 is intentionally preserved for invalid
-    AMS credentials so the admin/frontend can display
-    the error instead of treating it as an expired
-    application session.
-    """
-
-    try:
-
-        updated_user = await UserService(
-            db
-        ).update_user(
-            user_id,
-            payload,
-        )
-
-        if not updated_user:
-
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found.",
-            )
-
-        return serialize_document(
-            updated_user
-        )
-
-    except HTTPException:
-        """
-        Preserve application errors.
-
-        In particular:
-
-            400 -> invalid AMS credentials
-            404 -> user not found
-            409 -> duplicate data
-        """
-
-        raise
-
-    except Exception as exc:
-
-        print("")
-        print(
-            "========================================"
-        )
-        print(
-            "UPDATE USER ERROR"
-        )
-        print(
-            f"User ID: {user_id}"
-        )
-        print(
-            repr(exc)
-        )
-        print(
-            "========================================"
-        )
-        print("")
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
+    return await UserService(db).update_user(
+        user_id,
+        payload,
+    )
 
 
 # =========================================================
 # DELETE USER
 # =========================================================
-
 
 @router.delete(
     "/users/{user_id}",
@@ -528,18 +339,13 @@ def delete_user(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
-    UserService(db).delete_user(
-        user_id
-    )
-
+    UserService(db).delete_user(user_id)
     return None
 
 
 # =========================================================
 # ACTIVATE USER
 # =========================================================
-
 
 @router.post(
     "/users/{user_id}/activate",
@@ -550,16 +356,12 @@ def activate_user(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
-    return UserService(db).activate_user(
-        user_id
-    )
+    return UserService(db).activate_user(user_id)
 
 
 # =========================================================
 # ADMIN PASSWORD RESET
 # =========================================================
-
 
 @router.post(
     "/users/{user_id}/reset-password",
@@ -571,7 +373,6 @@ def reset_password(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     AuthService(db).reset_password(
         user_id,
         payload.newPassword,
@@ -584,7 +385,6 @@ def reset_password(
 # STUDENT PORTAL SYNCHRONIZATION
 # =========================================================
 
-
 @router.post(
     "/students/{student_id}/sync-profile",
 )
@@ -595,16 +395,23 @@ async def sync_student_profile(
     db: Database = Depends(get_db),
 ):
     """
-    Start one live AMS + Parent Portal synchronization in the
-    background.
+    Start one live AMS + Parent Portal synchronization.
 
-    EXISTING WORKING LOGIC IS PRESERVED.
+    The HTTP request returns immediately.
+
+    AMS credentials are required for synchronization.
+
+    Parent Portal:
+        username = VTU number
+        password = NOT REQUIRED
     """
 
     user_service = UserService(db)
 
     try:
-        student = user_service.get_user(student_id)
+        student = user_service.get_user(
+            student_id
+        )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -626,61 +433,89 @@ async def sync_student_profile(
     student_service = StudentService(db)
 
     # =====================================================
-    # PORTAL IDENTIFIER RULE
+    # PORTAL IDENTIFIER
     # =====================================================
 
     vtu_number = str(
         student.get("vtuNumber")
         or student.get("portalUsername")
         or ""
-    ).strip()
+    ).strip().upper()
 
-    if vtu_number:
-        student["vtuNumber"] = vtu_number
-        student["portalUsername"] = vtu_number
+    if not vtu_number:
+        return {
+            "success": False,
+            "message": (
+                "VTU number is not configured. "
+                "Student can add AMS credentials later."
+            ),
+            "studentId": student_id,
+            "id": student_id,
+            "syncStarted": False,
+            "syncInProgress": False,
+            "amsConfigured": False,
+        }
 
-        db["users"].update_one(
-            {"_id": ObjectId(student_id)},
-            {
-                "$set": {
-                    "vtuNumber": vtu_number,
-                    "portalUsername": vtu_number,
-                }
-            },
-        )
+    student["vtuNumber"] = vtu_number
+    student["portalUsername"] = vtu_number
+
+    try:
+        object_id = ObjectId(student_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid student ID.",
+        ) from exc
+
+    db["users"].update_one(
+        {"_id": object_id},
+        {
+            "$set": {
+                "vtuNumber": vtu_number,
+                "portalUsername": vtu_number,
+            }
+        },
+    )
+
+    # =====================================================
+    # CHECK AMS CREDENTIALS
+    # =====================================================
 
     try:
         credential_status = (
-            student_service.verify_portal_credentials(student)
+            student_service.verify_portal_credentials(
+                student
+            )
         )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unable to check portal credentials: {exc}",
+            detail=(
+                "Unable to check portal credentials: "
+                f"{exc}"
+            ),
         ) from exc
 
     if not credential_status.get("configured"):
         return {
             "success": False,
             "message": (
-                "AMS credentials or VTU number are not configured. "
-                "Parent Portal login uses the VTU number only; "
-                "no Parent Portal password is required."
+                "AMS credentials are not configured. "
+                "The student can add the AMS password later "
+                "from the student login."
             ),
             "studentId": student_id,
             "id": student_id,
             "student": student,
             "syncStarted": False,
             "syncInProgress": False,
+            "amsConfigured": False,
+            "parentPortalPasswordRequired": False,
         }
 
-    try:
-        object_id = ObjectId(student_id)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid student ID.",
-        )
+    # =====================================================
+    # PREVENT DOUBLE SYNC
+    # =====================================================
 
     existing = db["users"].find_one(
         {
@@ -692,11 +527,14 @@ async def sync_student_profile(
     if existing:
         return {
             "success": True,
-            "message": "Portal synchronization is already running.",
+            "message": (
+                "Portal synchronization is already running."
+            ),
             "studentId": student_id,
             "id": student_id,
             "syncStarted": False,
             "syncInProgress": True,
+            "amsConfigured": True,
         }
 
     db["users"].update_one(
@@ -711,33 +549,10 @@ async def sync_student_profile(
 
     async def _run_sync():
         try:
-            print("")
-            print(
-                "================================================"
-            )
-            print(
-                "BACKGROUND PORTAL SYNCHRONIZATION"
-            )
-            print(
-                f"Student ID: {student_id}"
-            )
-            print(
-                "Portal Username:",
-                student.get(
-                    "portalUsername",
-                    "-",
-                ),
-            )
-            print(
-                "================================================"
-            )
-
             runner = AttendanceSyncRunner(db)
 
-            result = (
-                await runner.sync_single_student(
-                    student_id
-                )
+            result = await runner.sync_single_student(
+                student_id
             )
 
             db["users"].update_one(
@@ -750,23 +565,8 @@ async def sync_student_profile(
                 },
             )
 
-            print(
-                "BACKGROUND PORTAL SYNCHRONIZATION FINISHED"
-            )
-            print(
-                "Result:",
-                result,
-            )
-
         except Exception as exc:
-
-            print(
-                "BACKGROUND PORTAL SYNCHRONIZATION ERROR:",
-                repr(exc),
-            )
-
             try:
-
                 db["users"].update_one(
                     {"_id": object_id},
                     {
@@ -776,13 +576,8 @@ async def sync_student_profile(
                         }
                     },
                 )
-
-            except Exception as status_exc:
-
-                print(
-                    "Unable to save sync failure status:",
-                    repr(status_exc),
-                )
+            except Exception:
+                pass
 
     background_tasks.add_task(
         _run_sync
@@ -798,18 +593,15 @@ async def sync_student_profile(
         "student": student,
         "syncStarted": True,
         "syncInProgress": True,
+        "amsConfigured": True,
         "portal": {
             "configured": True,
             "username": (
                 student.get("portalUsername")
                 or student.get("vtuNumber")
             ),
-            "vtuNumber": student.get(
-                "vtuNumber"
-            ),
-            "rollNumber": student.get(
-                "rollNumber"
-            ),
+            "vtuNumber": student.get("vtuNumber"),
+            "rollNumber": student.get("rollNumber"),
             "parentPasswordRequired": False,
             "synced": bool(
                 student.get(
@@ -825,9 +617,8 @@ async def sync_student_profile(
 
 
 # =========================================================
-# STUDENT PORTAL TEST
+# MANUAL PORTAL TEST
 # =========================================================
-
 
 @router.get(
     "/students/{student_id}/portal-test",
@@ -837,12 +628,6 @@ async def portal_test(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-    """
-    Manually execute one live portal synchronization.
-
-    EXISTING WORKING LOGIC IS PRESERVED.
-    """
-
     user_service = UserService(db)
 
     try:
@@ -875,69 +660,31 @@ async def portal_test(
         return {
             "success": False,
             "message": (
-                "AMS credentials or VTU number are not configured. "
-                "Parent Portal requires only the VTU number."
+                "AMS credentials are not configured. "
+                "The student can configure them later."
             ),
             "student": student,
         }
 
     try:
-
-        print("")
-        print(
-            "=========================================="
-        )
-        print(
-            "PARENT PORTAL TEST"
-        )
-        print(
-            "Student:",
-            student_id,
-        )
-        print(
-            "Parent Portal VTU Username:",
-            student.get("portalUsername")
-            or student.get("vtuNumber"),
-        )
-        print(
-            "AMS VTU Username:",
-            student.get("vtuNumber"),
-        )
-        print(
-            "Roll / Registration Number:",
-            student.get("rollNumber"),
-        )
-        print(
-            "=========================================="
-        )
-        print("")
-
         runner = AttendanceSyncRunner(db)
 
-        sync_result = (
-            await runner.sync_single_student(
-                student_id
-            )
+        sync_result = await runner.sync_single_student(
+            student_id
         )
 
         attendance_service = AttendanceService(db)
 
-        attendance = (
-            attendance_service.list_records(
-                student_id
-            )
+        attendance = attendance_service.list_records(
+            student_id
         )
 
-        attendance_summary = (
-            attendance_service.summary(
-                student_id
-            )
+        attendance_summary = attendance_service.summary(
+            student_id
         )
 
-        updated_student = (
-            user_service.get_user(
-                student_id
-            )
+        updated_student = user_service.get_user(
+            student_id
         )
 
         return {
@@ -957,12 +704,6 @@ async def portal_test(
         }
 
     except Exception as exc:
-
-        print(
-            "PORTAL TEST ERROR:",
-            repr(exc),
-        )
-
         return {
             "success": False,
             "message": (
@@ -977,7 +718,6 @@ async def portal_test(
 # STUDENT OVERVIEW
 # =========================================================
 
-
 @router.get(
     "/students/{student_id}/overview",
 )
@@ -986,7 +726,6 @@ def student_overview(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     user_service = UserService(db)
     attendance_service = AttendanceService(db)
     student_service = StudentService(db)
@@ -996,36 +735,26 @@ def student_overview(
     )
 
     if not student:
-
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Student not found.",
         )
 
-    if student.get(
-        "role"
-    ) != "student":
-
+    if student.get("role") != "student":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Selected user is not a student.",
         )
 
-    subjects = (
-        student_service.get_student_associated_subjects(
-            student_id
-        )
+    subjects = student_service.get_student_associated_subjects(
+        student_id
     )
 
     timetable = [
         serialize_document(record)
         for record in (
             db[TIMETABLE]
-            .find(
-                {
-                    "studentId": student_id
-                }
-            )
+            .find({"studentId": student_id})
             .sort(
                 [
                     ("day", 1),
@@ -1039,15 +768,8 @@ def student_overview(
         serialize_document(notification)
         for notification in (
             db[NOTIFICATIONS]
-            .find(
-                {
-                    "studentId": student_id
-                }
-            )
-            .sort(
-                "createdAt",
-                -1,
-            )
+            .find({"studentId": student_id})
+            .sort("createdAt", -1)
             .limit(100)
         )
     ]
@@ -1056,20 +778,14 @@ def student_overview(
         "success": True,
         "studentId": student_id,
         "student": student,
-        "attendance": (
-            attendance_service.list_records(
-                student_id
-            )
+        "attendance": attendance_service.list_records(
+            student_id
         ),
-        "attendanceSummary": (
-            attendance_service.summary(
-                student_id
-            )
+        "attendanceSummary": attendance_service.summary(
+            student_id
         ),
-        "attendanceChanges": (
-            attendance_service.list_changes(
-                student_id
-            )
+        "attendanceChanges": attendance_service.list_changes(
+            student_id
         ),
         "subjects": subjects,
         "timetable": timetable,
@@ -1109,7 +825,6 @@ def student_overview(
 # STUDENT ATTENDANCE
 # =========================================================
 
-
 @router.get(
     "/students/{student_id}/attendance",
 )
@@ -1118,10 +833,7 @@ def student_attendance(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
-    return AttendanceService(
-        db
-    ).list_records(
+    return AttendanceService(db).list_records(
         student_id
     )
 
@@ -1129,7 +841,6 @@ def student_attendance(
 # =========================================================
 # STUDENT ATTENDANCE SUMMARY
 # =========================================================
-
 
 @router.get(
     "/students/{student_id}/attendance/summary",
@@ -1139,10 +850,7 @@ def student_attendance_summary(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
-    return AttendanceService(
-        db
-    ).summary(
+    return AttendanceService(db).summary(
         student_id
     )
 
@@ -1150,7 +858,6 @@ def student_attendance_summary(
 # =========================================================
 # STUDENT ATTENDANCE CHANGES
 # =========================================================
-
 
 @router.get(
     "/students/{student_id}/attendance/changes",
@@ -1160,10 +867,7 @@ def student_attendance_changes(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
-    return AttendanceService(
-        db
-    ).list_changes(
+    return AttendanceService(db).list_changes(
         student_id
     )
 
@@ -1171,7 +875,6 @@ def student_attendance_changes(
 # =========================================================
 # ALL ATTENDANCE
 # =========================================================
-
 
 @router.get(
     "/attendance",
@@ -1181,10 +884,7 @@ def all_attendance(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
-    return AttendanceService(
-        db
-    ).list_all_records(
+    return AttendanceService(db).list_all_records(
         studentId
     )
 
@@ -1192,7 +892,6 @@ def all_attendance(
 # =========================================================
 # UPDATE ATTENDANCE
 # =========================================================
-
 
 @router.put(
     "/attendance/{attendance_id}",
@@ -1203,10 +902,7 @@ def update_attendance(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
-    return AttendanceService(
-        db
-    ).update_attendance(
+    return AttendanceService(db).update_attendance(
         attendance_id,
         payload.status,
     )
@@ -1215,7 +911,6 @@ def update_attendance(
 # =========================================================
 # CREATE ATTENDANCE
 # =========================================================
-
 
 @router.post(
     "/attendance",
@@ -1226,10 +921,7 @@ def create_attendance(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
-    from app.schemas.attendance import (
-        IncomingAttendanceRecord
-    )
+    from app.schemas.attendance import IncomingAttendanceRecord
 
     record = IncomingAttendanceRecord(
         subjectId=payload.subjectId,
@@ -1239,9 +931,7 @@ def create_attendance(
         source="admin",
     )
 
-    return AttendanceService(
-        db
-    ).sync_student_records(
+    return AttendanceService(db).sync_student_records(
         student_id=payload.studentId,
         incoming_records=[record],
     )
@@ -1251,7 +941,6 @@ def create_attendance(
 # SUBJECTS
 # =========================================================
 
-
 @router.get(
     "/subjects",
 )
@@ -1260,7 +949,6 @@ def list_subjects(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     if studentId:
         return StudentService(
             db
@@ -1270,26 +958,14 @@ def list_subjects(
 
     subjects = (
         db[SUBJECTS]
-        .find(
-            {
-                "active": True
-            }
-        )
-        .sort(
-            "name",
-            1,
-        )
+        .find({"active": True})
+        .sort("name", 1)
     )
 
     return [
         serialize_document(subject)
         for subject in subjects
     ]
-
-
-# =========================================================
-# SUBJECT CLEANUP
-# =========================================================
 
 
 @router.post(
@@ -1300,7 +976,6 @@ def cleanup_student_subjects(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     result = db[SUBJECTS].update_many(
         {
             "studentId": student_id,
@@ -1341,7 +1016,6 @@ def cleanup_student_subjects(
 # CREATE SUBJECT
 # =========================================================
 
-
 @router.post(
     "/subjects",
     status_code=status.HTTP_201_CREATED,
@@ -1351,7 +1025,6 @@ def create_subject(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     from app.utils.dates import utc_now
 
     now = utc_now()
@@ -1375,26 +1048,20 @@ def create_subject(
     }
 
     if document.get("code"):
-
         existing = db[SUBJECTS].find_one(
-            {
-                "code": document["code"]
-            }
+            {"code": document["code"]}
         )
 
         if existing:
-
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"Subject code '{document['code']}' "
-                    "already exists."
+                    f"Subject code "
+                    f"'{document['code']}' already exists."
                 ),
             )
 
-    result = db[
-        SUBJECTS
-    ].insert_one(
+    result = db[SUBJECTS].insert_one(
         document
     )
 
@@ -1409,7 +1076,6 @@ def create_subject(
 # UPDATE SUBJECT
 # =========================================================
 
-
 @router.put(
     "/subjects/{subject_id}",
 )
@@ -1419,59 +1085,41 @@ def update_subject(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     from app.utils.dates import utc_now
 
     try:
-
         object_id = ObjectId(
             subject_id
         )
-
-    except Exception:
-
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid subject ID.",
-        )
+        ) from exc
 
     update = {
         key: value
-        for key, value in (
-            payload.model_dump().items()
-        )
+        for key, value in payload.model_dump().items()
         if value is not None
     }
 
     if update:
-
         update["updatedAt"] = utc_now()
         update["source"] = "admin"
 
-        result = db[
-            SUBJECTS
-        ].update_one(
-            {
-                "_id": object_id
-            },
-            {
-                "$set": update
-            },
+        result = db[SUBJECTS].update_one(
+            {"_id": object_id},
+            {"$set": update},
         )
 
         if result.matched_count == 0:
-
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Subject not found.",
             )
 
-    subject = db[
-        SUBJECTS
-    ].find_one(
-        {
-            "_id": object_id
-        }
+    subject = db[SUBJECTS].find_one(
+        {"_id": object_id}
     )
 
     return serialize_document(
@@ -1483,7 +1131,6 @@ def update_subject(
 # TIMETABLE
 # =========================================================
 
-
 @router.get(
     "/students/{student_id}/timetable",
 )
@@ -1492,14 +1139,9 @@ def student_timetable(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     records = (
         db[TIMETABLE]
-        .find(
-            {
-                "studentId": student_id
-            }
-        )
+        .find({"studentId": student_id})
         .sort(
             [
                 ("day", 1),
@@ -1518,7 +1160,6 @@ def student_timetable(
 # CREATE TIMETABLE
 # =========================================================
 
-
 @router.post(
     "/timetable",
     status_code=status.HTTP_201_CREATED,
@@ -1528,7 +1169,6 @@ def create_timetable(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     from app.utils.dates import utc_now
 
     now = utc_now()
@@ -1540,9 +1180,7 @@ def create_timetable(
         "updatedAt": now,
     }
 
-    result = db[
-        TIMETABLE
-    ].insert_one(
+    result = db[TIMETABLE].insert_one(
         document
     )
 
@@ -1557,7 +1195,6 @@ def create_timetable(
 # UPDATE TIMETABLE
 # =========================================================
 
-
 @router.put(
     "/timetable/{timetable_id}",
 )
@@ -1567,59 +1204,41 @@ def update_timetable(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     from app.utils.dates import utc_now
 
     try:
-
         object_id = ObjectId(
             timetable_id
         )
-
-    except Exception:
-
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid timetable ID.",
-        )
+        ) from exc
 
     update = {
         key: value
-        for key, value in (
-            payload.model_dump().items()
-        )
+        for key, value in payload.model_dump().items()
         if value is not None
     }
 
     if update:
-
         update["source"] = "admin"
         update["updatedAt"] = utc_now()
 
-        result = db[
-            TIMETABLE
-        ].update_one(
-            {
-                "_id": object_id
-            },
-            {
-                "$set": update
-            },
+        result = db[TIMETABLE].update_one(
+            {"_id": object_id},
+            {"$set": update},
         )
 
         if result.matched_count == 0:
-
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Timetable record not found.",
             )
 
-    timetable = db[
-        TIMETABLE
-    ].find_one(
-        {
-            "_id": object_id
-        }
+    timetable = db[TIMETABLE].find_one(
+        {"_id": object_id}
     )
 
     return serialize_document(
@@ -1631,7 +1250,6 @@ def update_timetable(
 # NOTIFICATIONS
 # =========================================================
 
-
 @router.get(
     "/students/{student_id}/notifications",
 )
@@ -1640,18 +1258,10 @@ def student_notifications(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     notifications = (
         db[NOTIFICATIONS]
-        .find(
-            {
-                "studentId": student_id
-            }
-        )
-        .sort(
-            "createdAt",
-            -1,
-        )
+        .find({"studentId": student_id})
+        .sort("createdAt", -1)
         .limit(100)
     )
 
@@ -1665,7 +1275,6 @@ def student_notifications(
 # SMS LOGS
 # =========================================================
 
-
 @router.get(
     "/sms-logs",
 )
@@ -1673,14 +1282,10 @@ def sms_logs(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     logs = (
         db[SMS_LOGS]
         .find()
-        .sort(
-            "createdAt",
-            -1,
-        )
+        .sort("createdAt", -1)
         .limit(500)
     )
 
@@ -1694,7 +1299,6 @@ def sms_logs(
 # AUDIT LOGS
 # =========================================================
 
-
 @router.get(
     "/audit-logs",
 )
@@ -1703,7 +1307,6 @@ def audit_logs(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     query = {}
 
     if student_id:
@@ -1712,10 +1315,7 @@ def audit_logs(
     logs = (
         db[AUDIT_LOGS]
         .find(query)
-        .sort(
-            "createdAt",
-            -1,
-        )
+        .sort("createdAt", -1)
         .limit(500)
     )
 
@@ -1729,7 +1329,6 @@ def audit_logs(
 # COMPLETE SYNC
 # =========================================================
 
-
 @router.post(
     "/sync",
     response_model=SyncResult,
@@ -1742,41 +1341,34 @@ async def run_sync(
     """
     Synchronization endpoint.
 
-    Existing synchronization behavior is preserved.
+    1. studentId + records:
+       Manual attendance save.
+
+    2. studentId without records:
+       Live synchronization for one student.
+
+    3. no studentId:
+       Live synchronization for all configured students.
     """
 
     runner = AttendanceSyncRunner(db)
-
-    # =====================================================
-    # MANUAL RECORDS
-    # =====================================================
 
     if (
         payload.studentId
         and payload.records is not None
     ):
-
         return runner.sync_manual_records(
             payload.studentId,
             payload.records,
         )
 
-    # =====================================================
-    # SINGLE STUDENT LIVE SYNC
-    # =====================================================
-
     if (
         payload.studentId
         and payload.records is None
     ):
-
         return await runner.sync_single_student(
             payload.studentId
         )
-
-    # =====================================================
-    # ALL STUDENTS LIVE SYNC
-    # =====================================================
 
     return await runner.sync_all_students()
 
@@ -1785,7 +1377,6 @@ async def run_sync(
 # SYNC STATUS
 # =========================================================
 
-
 @router.get(
     "/sync/status",
 )
@@ -1793,7 +1384,6 @@ def sync_status(
     _admin: dict = Depends(require_admin),
     db: Database = Depends(get_db),
 ):
-
     return AttendanceSyncRunner(
         db
     ).latest_status()

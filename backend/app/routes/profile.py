@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from __future__ import annotations
+
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pymongo.database import Database
 
 from app.config.database import get_db
@@ -9,13 +13,11 @@ from app.schemas.user import (
     UserPublic,
 )
 from app.security.permissions import get_current_user
-from app.services.user_service import UserService
 from app.services.base import serialize_document
+from app.services.user_service import UserService
+from app.scheduler.attendance_sync import AttendanceSyncRunner
 
-
-# =========================================================
-# ROUTER
-# =========================================================
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/profile",
@@ -34,29 +36,6 @@ router = APIRouter(
 def get_profile(
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Return the complete authenticated user's profile.
-
-    IMPORTANT IDENTIFIER MAPPING
-
-        VTU number:
-            VTU26381
-
-        Roll / registration number:
-            23UECS1039
-
-        AMS username:
-            VTU26381
-
-        Parent Portal login:
-            VTU26381
-
-        Parent Portal password:
-            NOT REQUIRED
-
-    Passwords are never returned.
-    """
-
     return current_user
 
 
@@ -73,17 +52,6 @@ def update_profile(
     current_user: dict = Depends(get_current_user),
     db: Database = Depends(get_db),
 ):
-    """
-    Update student-controlled application settings.
-
-    Currently supported:
-
-        - smsEnabled
-        - notificationsEnabled
-
-    College identity information is not changed here.
-    """
-
     updated_user = UserService(
         db
     ).update_profile(
@@ -112,70 +80,24 @@ def update_profile(
 )
 async def update_portal_credentials(
     payload: PortalCredentialsUpdate,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     db: Database = Depends(get_db),
 ):
     """
-    Save or update Veltech AMS credentials.
+    Save or update AMS credentials.
 
-    IMPORTANT:
+    AMS credentials are optional during Admin student creation.
 
-        AMS username = VTU number
+    A student can configure or update AMS credentials later.
 
-    Example:
+    AMS username:
+        VTU number
 
-        VTU number  = VTU26381
-        Roll number = 23UECS1039
-
-    Therefore:
-
-        portalUsername = VTU26381
-
-    NOT:
-
-        portalUsername = 23UECS1039
-
-    Parent Portal does not require a password.
-
-    The AMS password is encrypted by UserService
-    before being stored in MongoDB.
-
-    Passwords are never returned.
-
-    ---------------------------------------------------------
-    ERROR BEHAVIOUR
-    ---------------------------------------------------------
-
-    Correct AMS credentials:
-
-        validate AMS
-            ↓
-        save encrypted credentials
-            ↓
-        return 200
-
-    Wrong AMS credentials:
-
-        validate AMS
-            ↓
-        HTTP 400
-            ↓
-        frontend displays error
-            ↓
-        student remains logged in
-
-    IMPORTANT:
-
-    This endpoint must NEVER use HTTP 401 for an invalid
-    AMS username/password.
-
-    HTTP 401 is reserved for an invalid/expired application
-    authentication token.
+    Parent Portal:
+        VTU number
+        Password not required
     """
-
-    # =====================================================
-    # BASIC VALIDATION
-    # =====================================================
 
     if not payload:
         raise HTTPException(
@@ -183,58 +105,49 @@ async def update_portal_credentials(
             detail="AMS credentials are required.",
         )
 
-    # =====================================================
-    # NORMALIZE USERNAME
-    # =====================================================
+    vtu_number = str(
+        current_user.get("vtuNumber")
+        or ""
+    ).strip().upper()
 
-    portal_username = (
-        str(
-            payload.portalUsername
-            or ""
-        )
-        .strip()
-        .upper()
-    )
-
-    if not portal_username:
+    if not vtu_number:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="VTU number is required.",
+            detail=(
+                "Student VTU number is required "
+                "before configuring AMS."
+            ),
         )
 
-    # =====================================================
-    # CREATE CLEAN PAYLOAD
-    # =====================================================
+    portal_username = str(
+        payload.portalUsername
+        or vtu_number
+    ).strip().upper()
 
-    payload.portalUsername = (
-        portal_username
-    )
+    portal_password = str(
+        payload.portalPassword
+        or ""
+    ).strip()
 
-    # =====================================================
-    # VALIDATE + SAVE AMS CREDENTIALS
-    # =====================================================
-    #
-    # UserService performs the live AMS validation.
-    #
-    # IMPORTANT:
-    #
-    # HTTPException from UserService is deliberately
-    # allowed to propagate.
-    #
-    # Therefore if UserService raises:
-    #
-    #     HTTPException(400, "Invalid AMS credentials.")
-    #
-    # FastAPI returns exactly:
-    #
-    #     HTTP 400
-    #
-    # and the frontend does NOT logout.
-    #
-    # =====================================================
+    if portal_username != vtu_number:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "AMS username must be the student's "
+                "VTU number."
+            ),
+        )
+
+    if not portal_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="AMS password is required.",
+        )
+
+    payload.portalUsername = vtu_number
+    payload.portalPassword = portal_password
 
     try:
-
         result = await UserService(
             db
         ).update_portal_credentials(
@@ -243,19 +156,9 @@ async def update_portal_credentials(
         )
 
     except HTTPException:
-        # -------------------------------------------------
-        # DO NOT CHANGE THE STATUS CODE.
-        #
-        # Especially do not convert 400 -> 401.
-        # -------------------------------------------------
         raise
 
     except ValueError as exc:
-        # -------------------------------------------------
-        # Invalid credential/input errors should be shown
-        # to the student instead of becoming a server error.
-        # -------------------------------------------------
-
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc)
@@ -263,16 +166,7 @@ async def update_portal_credentials(
         ) from exc
 
     except Exception as exc:
-        # -------------------------------------------------
-        # Unexpected errors remain server errors.
-        #
-        # This is NOT treated as invalid credentials because
-        # we should not hide real backend/database problems.
-        # -------------------------------------------------
-
-        import logging
-
-        logging.getLogger(__name__).exception(
+        logger.exception(
             "AMS credential update failed: %s",
             exc,
         )
@@ -285,19 +179,61 @@ async def update_portal_credentials(
             ),
         ) from exc
 
-    # =====================================================
-    # USER NOT FOUND
-    # =====================================================
-
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Unable to update portal credentials.",
+            detail=(
+                "Unable to update portal credentials."
+            ),
         )
 
-    # =====================================================
-    # SUCCESS
-    # =====================================================
+    async def _sync_student():
+        try:
+            sync_result = await AttendanceSyncRunner(
+                db
+            ).sync_single_student(
+                current_user["id"]
+            )
+
+            logger.info(
+                "Student AMS sync completed: "
+                "student=%s success=%s attendance=%s "
+                "subjects=%s records=%s errors=%s",
+                current_user["id"],
+                sync_result.get(
+                    "success",
+                    False,
+                ),
+                sync_result.get(
+                    "attendanceFetched",
+                    0,
+                ),
+                sync_result.get(
+                    "subjectsFetched",
+                    0,
+                ),
+                sync_result.get(
+                    "recordsProcessed",
+                    0,
+                ),
+                sync_result.get(
+                    "errorsCount",
+                    0,
+                ),
+            )
+
+        except Exception as exc:
+            logger.exception(
+                "Student AMS sync failed after "
+                "credentials were saved: student=%s "
+                "error=%s",
+                current_user["id"],
+                exc,
+            )
+
+    background_tasks.add_task(
+        _sync_student
+    )
 
     return result
 
@@ -314,28 +250,6 @@ def get_portal_credentials(
     current_user: dict = Depends(get_current_user),
     db: Database = Depends(get_db),
 ):
-    """
-    Return the student's AMS credential status.
-
-    Example:
-
-        {
-            "configured": true,
-            "portalUsername": "VTU26381"
-        }
-
-    OR:
-
-        {
-            "configured": false,
-            "portalUsername": null
-        }
-
-    The password is NEVER returned.
-
-    Parent Portal password is not required.
-    """
-
     result = UserService(
         db
     ).get_portal_credentials_status(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 from urllib.parse import urljoin
 
@@ -9,25 +10,18 @@ from bs4 import BeautifulSoup
 from app.college.parser import parse_ams_profile
 
 
-# =========================================================
-# AMS AUTHENTICATION ERROR
-# =========================================================
+logger = logging.getLogger(__name__)
 
 
 class AmsAuthenticationError(Exception):
     """
-    Raised only when the supplied AMS credentials are invalid.
+    Raised when the supplied AMS credentials are invalid.
 
-    This is intentionally different from:
-        - network errors
-        - timeout errors
-        - AMS server errors
-        - parsing errors
-
-    The frontend can therefore show:
-        "Invalid AMS credentials."
-
-    without treating the error as an application login failure.
+    This is different from:
+    - network errors
+    - timeout errors
+    - AMS server errors
+    - parsing errors
     """
 
     def __init__(
@@ -47,19 +41,31 @@ class AmsAdapter:
     AMS LOGIN
     ---------
     Username:
-        portalUsername
-        Example: VTU26381
+        VTU number / portal username
+
+        Example:
+            VTU26381
 
     Password:
         AMS account password
 
     COLLEGE ROLL / REGISTRATION NUMBER
     ----------------------------------
-    vtuNumber
-    Example: 23UECS1039
+    rollNumber:
+        Example:
+            23UECS1039
 
-    Parent Portal login uses the student's VTU number.
-    Parent Portal password is NOT required.
+    IMPORTANT:
+        AMS username and college roll number are separate.
+
+        AMS username:
+            VTU26381
+
+        Roll / registration number:
+            23UECS1039
+
+    The Parent Portal uses the VTU number as its login
+    identifier according to the current project flow.
     """
 
     BASE_URL = "https://ams.veltech.edu.in"
@@ -101,10 +107,29 @@ class AmsAdapter:
         password: str,
         vtu_number: str | None = None,
     ) -> dict[str, Any]:
+        """
+        Login to the Vel Tech AMS.
+
+        username:
+            AMS / VTU username.
+
+        password:
+            AMS password.
+
+        vtu_number:
+            Optional roll/registration number retained for
+            compatibility with existing services.
+
+        Invalid credentials raise:
+            AmsAuthenticationError
+
+        Network/server errors are allowed to propagate so
+        UserService can distinguish them from invalid credentials.
+        """
 
         username = str(
             username or ""
-        ).strip()
+        ).strip().upper()
 
         password = str(
             password or ""
@@ -113,10 +138,6 @@ class AmsAdapter:
         vtu_number = str(
             vtu_number or ""
         ).strip()
-
-        # -----------------------------------------------------
-        # BASIC VALIDATION
-        # -----------------------------------------------------
 
         if not username:
             raise ValueError(
@@ -141,7 +162,7 @@ class AmsAdapter:
 
         try:
             # =================================================
-            # STEP 1: OPEN AMS LOGIN PAGE
+            # STEP 1: OPEN LOGIN PAGE
             # =================================================
 
             login_response = await client.get(
@@ -151,7 +172,7 @@ class AmsAdapter:
             login_response.raise_for_status()
 
             # =================================================
-            # STEP 2: SUBMIT AMS LOGIN
+            # STEP 2: SUBMIT LOGIN
             # =================================================
 
             validation_response = await client.post(
@@ -172,7 +193,16 @@ class AmsAdapter:
             validation_response.raise_for_status()
 
             # =================================================
-            # STEP 3: OPEN AMS DASHBOARD
+            # STEP 3: CHECK LOGIN RESPONSE
+            # =================================================
+
+            if self._is_invalid_login_response(
+                validation_response
+            ):
+                raise AmsAuthenticationError()
+
+            # =================================================
+            # STEP 4: OPEN DASHBOARD
             # =================================================
 
             dashboard_response = await client.get(
@@ -184,28 +214,46 @@ class AmsAdapter:
 
             dashboard_response.raise_for_status()
 
+            # =================================================
+            # STEP 5: CHECK REDIRECT
+            # =================================================
+
+            if self._is_login_page(
+                str(dashboard_response.url)
+            ):
+                raise AmsAuthenticationError()
+
             html = dashboard_response.text
 
             # =================================================
-            # STEP 4: VERIFY LOGIN
+            # STEP 6: CHECK AUTHENTICATION ERROR TEXT
+            # =================================================
+
+            if self._contains_authentication_error(
+                html
+            ):
+                raise AmsAuthenticationError()
+
+            # =================================================
+            # STEP 7: VERIFY STUDENT PAGE
             # =================================================
 
             if not self._looks_like_student_page(
                 html
             ):
-                # IMPORTANT:
-                #
-                # AMS accepted the HTTP request, but the
-                # returned page is not an authenticated
-                # student page.
-                #
-                # Treat this specifically as an
-                # authentication failure.
-                raise AmsAuthenticationError()
+                raise AmsAuthenticationError(
+                    "AMS login was not accepted. "
+                    "Please check the VTU number and AMS password."
+                )
 
             # =================================================
             # SUCCESS
             # =================================================
+
+            logger.info(
+                "AMS authentication successful for %s",
+                username,
+            )
 
             return {
                 "client": client,
@@ -219,14 +267,6 @@ class AmsAdapter:
             }
 
         except AmsAuthenticationError:
-            # -------------------------------------------------
-            # INVALID AMS CREDENTIALS
-            # -------------------------------------------------
-            #
-            # Do not replace this with a generic Exception.
-            # UserService can identify this error specifically.
-            # -------------------------------------------------
-
             try:
                 await client.aclose()
             except Exception:
@@ -235,18 +275,6 @@ class AmsAdapter:
             raise
 
         except httpx.HTTPStatusError as exc:
-            # -------------------------------------------------
-            # HTTP ERROR
-            # -------------------------------------------------
-            #
-            # A 401/403 from the AMS validation endpoint is
-            # treated as invalid credentials.
-            #
-            # Other HTTP errors are NOT automatically treated
-            # as invalid credentials because they may indicate
-            # an AMS server-side problem.
-            # -------------------------------------------------
-
             status_code = (
                 exc.response.status_code
                 if exc.response is not None
@@ -278,15 +306,6 @@ class AmsAdapter:
             httpx.WriteTimeout,
             httpx.PoolTimeout,
         ):
-            # -------------------------------------------------
-            # NETWORK / TIMEOUT ERROR
-            # -------------------------------------------------
-            #
-            # DO NOT report this as invalid credentials.
-            #
-            # The AMS server may simply be unavailable.
-            # -------------------------------------------------
-
             try:
                 await client.aclose()
             except Exception:
@@ -295,16 +314,117 @@ class AmsAdapter:
             raise
 
         except Exception:
-            # -------------------------------------------------
-            # OTHER AMS ERROR
-            # -------------------------------------------------
-
             try:
                 await client.aclose()
             except Exception:
                 pass
 
             raise
+
+    # =========================================================
+    # INVALID LOGIN RESPONSE
+    # =========================================================
+
+    @classmethod
+    def _is_invalid_login_response(
+        cls,
+        response: httpx.Response,
+    ) -> bool:
+        """
+        Detect failed AMS authentication after submitting
+        the login form.
+
+        AMS can return HTTP 200 after redirecting back to
+        Login.htm, so status code alone is not sufficient.
+        """
+
+        final_url = str(
+            response.url
+        )
+
+        if cls._is_login_page(
+            final_url
+        ):
+            return True
+
+        return cls._contains_authentication_error(
+            response.text
+        )
+
+    # =========================================================
+    # LOGIN PAGE DETECTION
+    # =========================================================
+
+    @classmethod
+    def _is_login_page(
+        cls,
+        url: str,
+    ) -> bool:
+        """
+        Detect whether AMS redirected the request back to
+        its login page.
+        """
+
+        normalized_url = str(
+            url or ""
+        ).lower()
+
+        return (
+            "login.htm" in normalized_url
+            or "login.aspx" in normalized_url
+            or "/login" in normalized_url
+        )
+
+    # =========================================================
+    # AUTHENTICATION ERROR TEXT
+    # =========================================================
+
+    @classmethod
+    def _contains_authentication_error(
+        cls,
+        html: str,
+    ) -> bool:
+        """
+        Detect common authentication failure messages.
+
+        This is intentionally conservative so normal student
+        profile pages are not incorrectly rejected.
+        """
+
+        if not html:
+            return False
+
+        soup = BeautifulSoup(
+            html,
+            "html.parser",
+        )
+
+        text = soup.get_text(
+            " ",
+            strip=True,
+        ).lower()
+
+        error_phrases = (
+            "invalid username",
+            "invalid password",
+            "invalid user",
+            "invalid credentials",
+            "username or password",
+            "user name or password",
+            "incorrect username",
+            "incorrect password",
+            "login failed",
+            "authentication failed",
+            "authentication failure",
+            "invalid login",
+            "wrong username",
+            "wrong password",
+        )
+
+        return any(
+            phrase in text
+            for phrase in error_phrases
+        )
 
     # =========================================================
     # GET STUDENT PROFILE
@@ -314,6 +434,9 @@ class AmsAdapter:
         self,
         session: dict[str, Any],
     ) -> dict[str, Any]:
+        """
+        Extract the complete student profile from AMS.
+        """
 
         client = session.get(
             "client"
@@ -329,7 +452,7 @@ class AmsAdapter:
         )
 
         # =====================================================
-        # REFRESH AMS DASHBOARD IF REQUIRED
+        # REFRESH DASHBOARD IF REQUIRED
         # =====================================================
 
         if not html:
@@ -341,6 +464,11 @@ class AmsAdapter:
             )
 
             response.raise_for_status()
+
+            if self._is_login_page(
+                str(response.url)
+            ):
+                raise AmsAuthenticationError()
 
             html = response.text
 
@@ -363,7 +491,7 @@ class AmsAdapter:
             )
 
         # =====================================================
-        # PRESERVE CORRECT IDENTIFIERS
+        # PRESERVE IDENTIFIERS
         # =====================================================
 
         portal_username = (
@@ -383,7 +511,7 @@ class AmsAdapter:
         if portal_username:
             profile["portalUsername"] = str(
                 portal_username
-            ).strip()
+            ).strip().upper()
 
         if roll_number:
             profile["vtuNumber"] = str(
@@ -412,9 +540,7 @@ class AmsAdapter:
                     },
                 )
 
-                if (
-                    photo_response.status_code == 200
-                ):
+                if photo_response.status_code == 200:
                     content_type = (
                         photo_response.headers
                         .get(
@@ -433,200 +559,12 @@ class AmsAdapter:
                         )
 
             except Exception as exc:
-                print(
-                    "AMS photo fetch warning:",
-                    str(exc),
+                logger.warning(
+                    "AMS photo fetch warning: %s",
+                    exc,
                 )
 
         return profile
-
-    # =========================================================
-    # GET STUDENT ATTENDANCE
-    # =========================================================
-
-    async def get_student_attendance(
-        self,
-        session: dict[str, Any],
-    ) -> list[dict[str, Any]]:
-        """
-        Fetch attendance from the authenticated AMS session.
-
-        IMPORTANT:
-            This is an additive method. Existing login,
-            profile parsing, photo fetching, and logout
-            behavior are not changed.
-
-        The AMS dashboard can expose attendance through a
-        normal HTML link. We first look for attendance-related
-        links and then parse HTML tables from the selected page.
-
-        If AMS exposes attendance through JavaScript/API calls
-        instead of an HTML page, this method returns an empty
-        list and the actual AMS endpoint must be added after
-        inspecting the network request used by the AMS page.
-        """
-
-        client = session.get("client")
-
-        if not client:
-            raise ValueError(
-                "AMS session is missing."
-            )
-
-        dashboard_html = session.get(
-            "dashboard_html"
-        )
-
-        if not dashboard_html:
-            response = await client.get(
-                self.DEFAULT_URL,
-                headers={
-                    "Referer": self.LOGIN_URL,
-                },
-            )
-            response.raise_for_status()
-            dashboard_html = response.text
-            session["dashboard_html"] = dashboard_html
-
-        soup = BeautifulSoup(
-            dashboard_html,
-            "html.parser",
-        )
-
-        # -----------------------------------------------------
-        # FIND ATTENDANCE PAGE
-        # -----------------------------------------------------
-
-        attendance_url = None
-
-        keywords = (
-            "attendance",
-            "attendence",
-            "attnd",
-        )
-
-        for link in soup.find_all("a"):
-            href = link.get("href")
-            text = link.get_text(
-                " ",
-                strip=True,
-            ).lower()
-
-            combined = f"{text} {href or ''}".lower()
-
-            if any(
-                keyword in combined
-                for keyword in keywords
-            ):
-                if href and not href.startswith("#"):
-                    attendance_url = urljoin(
-                        self.DEFAULT_URL,
-                        href,
-                    )
-                    break
-
-        # -----------------------------------------------------
-        # IF NO LINK WAS FOUND
-        # -----------------------------------------------------
-
-        if not attendance_url:
-            return []
-
-        # -----------------------------------------------------
-        # FETCH ATTENDANCE PAGE
-        # -----------------------------------------------------
-
-        response = await client.get(
-            attendance_url,
-            headers={
-                "Referer": self.DEFAULT_URL,
-            },
-        )
-        response.raise_for_status()
-
-        attendance_soup = BeautifulSoup(
-            response.text,
-            "html.parser",
-        )
-
-        # -----------------------------------------------------
-        # PARSE HTML TABLES GENERICALLY
-        # -----------------------------------------------------
-
-        records: list[dict[str, Any]] = []
-
-        for table in attendance_soup.find_all("table"):
-            rows = table.find_all("tr")
-
-            if len(rows) < 2:
-                continue
-
-            headers: list[str] = []
-
-            first_row_cells = rows[0].find_all(
-                ["th", "td"]
-            )
-
-            headers = [
-                cell.get_text(
-                    " ",
-                    strip=True,
-                )
-                for cell in first_row_cells
-            ]
-
-            normalized_headers = [
-                header.lower().strip()
-                for header in headers
-            ]
-
-            attendance_columns = any(
-                any(
-                    keyword in header
-                    for keyword in (
-                        "attendance",
-                        "present",
-                        "absent",
-                        "percentage",
-                        "%",
-                    )
-                )
-                for header in normalized_headers
-            )
-
-            if not attendance_columns:
-                continue
-
-            for row in rows[1:]:
-                cells = row.find_all(
-                    ["td", "th"]
-                )
-
-                values = [
-                    cell.get_text(
-                        " ",
-                        strip=True,
-                    )
-                    for cell in cells
-                ]
-
-                if not values:
-                    continue
-
-                record: dict[str, Any] = {}
-
-                for index, value in enumerate(values):
-                    if index < len(headers):
-                        key = headers[index] or f"column{index + 1}"
-                    else:
-                        key = f"column{index + 1}"
-
-                    record[key] = value
-
-                if record:
-                    records.append(record)
-
-        return records
 
     # =========================================================
     # LOGOUT
@@ -636,7 +574,6 @@ class AmsAdapter:
         self,
         session: dict[str, Any],
     ) -> None:
-
         client = session.get(
             "client"
         )
@@ -653,9 +590,9 @@ class AmsAdapter:
             )
 
         except Exception as exc:
-            print(
-                "AMS logout warning:",
-                str(exc),
+            logger.warning(
+                "AMS logout warning: %s",
+                exc,
             )
 
         finally:
@@ -665,7 +602,7 @@ class AmsAdapter:
                 pass
 
     # =========================================================
-    # CHECK AUTHENTICATED PAGE
+    # CHECK AUTHENTICATED STUDENT PAGE
     # =========================================================
 
     @classmethod
@@ -673,7 +610,6 @@ class AmsAdapter:
         cls,
         html: str,
     ) -> bool:
-
         if not html:
             return False
 
@@ -681,6 +617,10 @@ class AmsAdapter:
             html,
             "html.parser",
         )
+
+        # =====================================================
+        # DIRECT AMS PROFILE IDS
+        # =====================================================
 
         important_ids = [
             "MainContent_lblStuname",
@@ -691,30 +631,34 @@ class AmsAdapter:
             "MainContent_lblMothername",
         ]
 
-        matches = 0
-
-        for element_id in important_ids:
+        matches = sum(
+            1
+            for element_id in important_ids
             if soup.find(
                 id=element_id
-            ):
-                matches += 1
+            )
+        )
 
         if matches >= 2:
             return True
+
+        # =====================================================
+        # FALLBACK TEXT CHECK
+        # =====================================================
 
         page_text = soup.get_text(
             " ",
             strip=True,
         ).lower()
 
-        indicators = [
+        indicators = (
             "student",
             "father",
             "mother",
             "branch",
             "semester",
             "academic",
-        ]
+        )
 
         indicator_count = sum(
             1

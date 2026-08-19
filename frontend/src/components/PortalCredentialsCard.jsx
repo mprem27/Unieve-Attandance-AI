@@ -16,31 +16,16 @@ export default function PortalCredentialsCard() {
     portalUsername || ""
   );
   const [password, setPassword] = useState("");
-
-  const [showPassword, setShowPassword] =
-    useState(false);
-
+  const [showPassword, setShowPassword] = useState(false);
   const [success, setSuccess] = useState("");
-  const [validationError, setValidationError] =
-    useState("");
-
-  // =====================================================
-  // SAVE AMS CREDENTIALS
-  // =====================================================
+  const [validationError, setValidationError] = useState("");
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
     setSuccess("");
     setValidationError("");
 
-    // -----------------------------------------------------
-    // AMS USERNAME = VTU NUMBER
-    // Example: VTU26381
-    // -----------------------------------------------------
-
-    const cleanUsername =
-      username.trim().toUpperCase();
+    const cleanUsername = username.trim().toUpperCase();
 
     if (!cleanUsername) {
       setValidationError(
@@ -63,10 +48,6 @@ export default function PortalCredentialsCard() {
       return;
     }
 
-    // -----------------------------------------------------
-    // AMS PASSWORD
-    // -----------------------------------------------------
-
     if (!password) {
       setValidationError(
         "Please enter your AMS password."
@@ -80,27 +61,11 @@ export default function PortalCredentialsCard() {
         password
       );
 
-      // -----------------------------------------------------
-      // AMS CREDENTIALS + SYNC STATUS
-      // -----------------------------------------------------
-      //
-      // The backend now validates and saves the AMS
-      // credentials and then starts the existing student
-      // synchronization flow.
-      //
-      // Keep the credentials-success message separate
-      // from the synchronization result so that a successful
-      // credential save is not incorrectly shown as a failed
-      // login.
-      // -----------------------------------------------------
-
       if (result?.syncError) {
         setSuccess(
           "AMS credentials saved successfully, but AMS data synchronization could not be completed. Please try again."
         );
-        setValidationError(
-          result.syncError
-        );
+        setValidationError(result.syncError);
       } else if (result?.synced) {
         setSuccess(
           configured
@@ -124,16 +89,8 @@ export default function PortalCredentialsCard() {
       setUsername(cleanUsername);
       setPassword("");
       setShowPassword(false);
-
     } catch (err) {
-      console.error(
-        "AMS credential save failed:",
-        err
-      );
-
-      const detail =
-        err?.response?.data?.detail;
-
+      const detail = err?.response?.data?.detail;
       let backendMessage = "";
 
       if (typeof detail === "string") {
@@ -161,10 +118,6 @@ export default function PortalCredentialsCard() {
     }
   };
 
-  // =====================================================
-  // OPEN VELTECH AMS
-  // =====================================================
-
   const handleOpenPortal = () => {
     if (!PORTAL_CONFIG?.URL) {
       setValidationError(
@@ -180,23 +133,17 @@ export default function PortalCredentialsCard() {
     );
   };
 
-  // =====================================================
-  // LOADING
-  // =====================================================
-
   if (loading) {
     return (
       <section className="relative overflow-hidden rounded-3xl border border-slate-200/60 bg-white p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:p-8">
         <div className="animate-pulse space-y-5">
           <div className="flex items-center gap-4">
             <div className="h-12 w-12 rounded-2xl bg-slate-200" />
-
             <div className="space-y-2">
               <div className="h-5 w-48 rounded bg-slate-200" />
               <div className="h-4 w-72 max-w-full rounded bg-slate-100" />
             </div>
           </div>
-
           <div className="h-12 w-full rounded-xl bg-slate-100" />
           <div className="h-12 w-full rounded-xl bg-slate-100" />
           <div className="h-12 w-full rounded-xl bg-slate-100" />
@@ -208,18 +155,11 @@ export default function PortalCredentialsCard() {
   return (
     <section className="relative overflow-hidden rounded-3xl border border-slate-200/60 bg-white p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_12px_35px_rgb(0,0,0,0.07)] sm:p-8">
       <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-indigo-500/10 blur-3xl" />
-
       <div className="pointer-events-none absolute -bottom-24 -left-20 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" />
 
       <div className="relative">
-
-        {/* ================================================= */}
-        {/* HEADER */}
-        {/* ================================================= */}
-
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-4">
-
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/20">
               <svg
                 className="h-6 w-6"
@@ -241,15 +181,12 @@ export default function PortalCredentialsCard() {
                 {PORTAL_CONFIG?.NAME ||
                   "Veltech AMS Portal"}
               </h2>
-
               <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500 sm:text-sm">
                 Connect your college AMS portal to
                 synchronize your attendance information.
               </p>
             </div>
           </div>
-
-          {/* STATUS */}
 
           <div
             className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider ${
@@ -265,16 +202,11 @@ export default function PortalCredentialsCard() {
                   : "bg-amber-500"
               }`}
             />
-
             {configured
               ? "Configured"
               : "Not Configured"}
           </div>
         </div>
-
-        {/* ================================================= */}
-        {/* CURRENT CONFIGURATION */}
-        {/* ================================================= */}
 
         {configured && portalUsername && (
           <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
@@ -283,11 +215,9 @@ export default function PortalCredentialsCard() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
                   Connected AMS Account
                 </p>
-
                 <p className="mt-1 font-mono text-sm font-bold text-slate-800">
                   {portalUsername}
                 </p>
-
                 <p className="mt-1 text-xs font-medium text-slate-500">
                   Your AMS password is hidden for security.
                 </p>
@@ -312,17 +242,10 @@ export default function PortalCredentialsCard() {
           </div>
         )}
 
-        {/* ================================================= */}
-        {/* FORM */}
-        {/* ================================================= */}
-
         <form
           onSubmit={handleSubmit}
           className="mt-6 space-y-5"
         >
-
-          {/* USERNAME */}
-
           <div>
             <label
               htmlFor="portalUsername"
@@ -340,7 +263,6 @@ export default function PortalCredentialsCard() {
                 setUsername(
                   event.target.value.toUpperCase()
                 );
-
                 setValidationError("");
                 setSuccess("");
               }}
@@ -356,8 +278,6 @@ export default function PortalCredentialsCard() {
               Use your VTU number. Example: VTU26381
             </p>
           </div>
-
-          {/* PASSWORD */}
 
           <div>
             <label
@@ -378,10 +298,7 @@ export default function PortalCredentialsCard() {
                 }
                 value={password}
                 onChange={(event) => {
-                  setPassword(
-                    event.target.value
-                  );
-
+                  setPassword(event.target.value);
                   setValidationError("");
                   setSuccess("");
                 }}
@@ -435,7 +352,6 @@ export default function PortalCredentialsCard() {
                       strokeLinejoin="round"
                       d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
                     />
-
                     <circle
                       cx="12"
                       cy="12"
@@ -446,10 +362,6 @@ export default function PortalCredentialsCard() {
               </button>
             </div>
           </div>
-
-          {/* ================================================= */}
-          {/* ERROR */}
-          {/* ================================================= */}
 
           {(error || validationError) && (
             <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
@@ -468,15 +380,10 @@ export default function PortalCredentialsCard() {
               </svg>
 
               <p className="text-sm font-medium text-rose-700">
-                {validationError ||
-                  error}
+                {validationError || error}
               </p>
             </div>
           )}
-
-          {/* ================================================= */}
-          {/* SUCCESS */}
-          {/* ================================================= */}
 
           {success && (
             <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
@@ -499,10 +406,6 @@ export default function PortalCredentialsCard() {
               </p>
             </div>
           )}
-
-          {/* ================================================= */}
-          {/* ACTIONS */}
-          {/* ================================================= */}
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
@@ -562,10 +465,6 @@ export default function PortalCredentialsCard() {
           </div>
         </form>
 
-        {/* ================================================= */}
-        {/* INFORMATION */}
-        {/* ================================================= */}
-
         <div className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
           <div className="flex items-start gap-3">
             <svg
@@ -580,7 +479,6 @@ export default function PortalCredentialsCard() {
                 strokeLinejoin="round"
                 d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7l7-4z"
               />
-
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -594,22 +492,16 @@ export default function PortalCredentialsCard() {
               </p>
 
               <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500">
-                Your AMS username is your VTU
-                number. The password is verified
-                against the live AMS portal before
-                being saved and is never displayed
-                after saving.
+                Your AMS username is your VTU number.
+                The password is verified against the
+                live AMS portal before being saved and
+                is never displayed after saving.
               </p>
             </div>
           </div>
         </div>
 
-        {/* ================================================= */}
-        {/* PORTAL FEATURES */}
-        {/* ================================================= */}
-
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
-
           <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
               <svg
@@ -687,7 +579,6 @@ export default function PortalCredentialsCard() {
               Password is never shown in the interface.
             </p>
           </div>
-
         </div>
       </div>
     </section>

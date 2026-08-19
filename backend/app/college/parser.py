@@ -1044,7 +1044,7 @@ def parse_attendance_table(
             if records:
                 all_records.extend(records)
         except Exception as exc:
-            print(f"{parser.__name__} failed: {exc!r}")
+            pass
 
     records = _deduplicate_records(all_records)
 

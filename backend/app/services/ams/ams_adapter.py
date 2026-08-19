@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 from urllib.parse import urljoin
 
@@ -38,34 +39,19 @@ class AmsAdapter:
     """
     Vel Tech Academic Management System adapter.
 
-    AMS LOGIN
+    IMPORTANT
     ---------
-    Username:
-        VTU number / portal username
+    This adapter does NOT handle attendance.
 
-        Example:
-            VTU26381
+    It handles:
+        - AMS login
+        - student profile
+        - timetable page
+        - bucket
+        - course registered details
+        - timetable grid
 
-    Password:
-        AMS account password
-
-    COLLEGE ROLL / REGISTRATION NUMBER
-    ----------------------------------
-    rollNumber:
-        Example:
-            23UECS1039
-
-    IMPORTANT:
-        AMS username and college roll number are separate.
-
-        AMS username:
-            VTU26381
-
-        Roll / registration number:
-            23UECS1039
-
-    The Parent Portal uses the VTU number as its login
-    identifier according to the current project flow.
+    Existing attendance implementation is untouched.
     """
 
     BASE_URL = "https://ams.veltech.edu.in"
@@ -74,6 +60,8 @@ class AmsAdapter:
     VALIDATION_URL = f"{BASE_URL}/Validation.aspx"
     DEFAULT_URL = f"{BASE_URL}/Default.aspx"
     LOGOUT_URL = f"{BASE_URL}/Logout.aspx"
+
+    TIMETABLE_URL = f"{BASE_URL}/TimeTable.aspx"
 
     def __init__(self) -> None:
         self.timeout = 60.0
@@ -107,25 +95,6 @@ class AmsAdapter:
         password: str,
         vtu_number: str | None = None,
     ) -> dict[str, Any]:
-        """
-        Login to the Vel Tech AMS.
-
-        username:
-            AMS / VTU username.
-
-        password:
-            AMS password.
-
-        vtu_number:
-            Optional roll/registration number retained for
-            compatibility with existing services.
-
-        Invalid credentials raise:
-            AmsAuthenticationError
-
-        Network/server errors are allowed to propagate so
-        UserService can distinguish them from invalid credentials.
-        """
 
         username = str(
             username or ""
@@ -162,7 +131,7 @@ class AmsAdapter:
 
         try:
             # =================================================
-            # STEP 1: OPEN LOGIN PAGE
+            # 1. OPEN LOGIN PAGE
             # =================================================
 
             login_response = await client.get(
@@ -172,7 +141,7 @@ class AmsAdapter:
             login_response.raise_for_status()
 
             # =================================================
-            # STEP 2: SUBMIT LOGIN
+            # 2. LOGIN
             # =================================================
 
             validation_response = await client.post(
@@ -193,7 +162,7 @@ class AmsAdapter:
             validation_response.raise_for_status()
 
             # =================================================
-            # STEP 3: CHECK LOGIN RESPONSE
+            # 3. CHECK LOGIN
             # =================================================
 
             if self._is_invalid_login_response(
@@ -202,7 +171,7 @@ class AmsAdapter:
                 raise AmsAuthenticationError()
 
             # =================================================
-            # STEP 4: OPEN DASHBOARD
+            # 4. OPEN DASHBOARD
             # =================================================
 
             dashboard_response = await client.get(
@@ -214,10 +183,6 @@ class AmsAdapter:
 
             dashboard_response.raise_for_status()
 
-            # =================================================
-            # STEP 5: CHECK REDIRECT
-            # =================================================
-
             if self._is_login_page(
                 str(dashboard_response.url)
             ):
@@ -225,18 +190,10 @@ class AmsAdapter:
 
             html = dashboard_response.text
 
-            # =================================================
-            # STEP 6: CHECK AUTHENTICATION ERROR TEXT
-            # =================================================
-
             if self._contains_authentication_error(
                 html
             ):
                 raise AmsAuthenticationError()
-
-            # =================================================
-            # STEP 7: VERIFY STUDENT PAGE
-            # =================================================
 
             if not self._looks_like_student_page(
                 html
@@ -245,10 +202,6 @@ class AmsAdapter:
                     "AMS login was not accepted. "
                     "Please check the VTU number and AMS password."
                 )
-
-            # =================================================
-            # SUCCESS
-            # =================================================
 
             logger.info(
                 "AMS authentication successful for %s",
@@ -267,6 +220,7 @@ class AmsAdapter:
             }
 
         except AmsAuthenticationError:
+
             try:
                 await client.aclose()
             except Exception:
@@ -275,6 +229,7 @@ class AmsAdapter:
             raise
 
         except httpx.HTTPStatusError as exc:
+
             status_code = (
                 exc.response.status_code
                 if exc.response is not None
@@ -285,6 +240,7 @@ class AmsAdapter:
                 401,
                 403,
             }:
+
                 try:
                     await client.aclose()
                 except Exception:
@@ -306,6 +262,7 @@ class AmsAdapter:
             httpx.WriteTimeout,
             httpx.PoolTimeout,
         ):
+
             try:
                 await client.aclose()
             except Exception:
@@ -314,6 +271,7 @@ class AmsAdapter:
             raise
 
         except Exception:
+
             try:
                 await client.aclose()
             except Exception:
@@ -322,7 +280,7 @@ class AmsAdapter:
             raise
 
     # =========================================================
-    # INVALID LOGIN RESPONSE
+    # LOGIN RESPONSE CHECK
     # =========================================================
 
     @classmethod
@@ -330,13 +288,6 @@ class AmsAdapter:
         cls,
         response: httpx.Response,
     ) -> bool:
-        """
-        Detect failed AMS authentication after submitting
-        the login form.
-
-        AMS can return HTTP 200 after redirecting back to
-        Login.htm, so status code alone is not sufficient.
-        """
 
         final_url = str(
             response.url
@@ -360,10 +311,6 @@ class AmsAdapter:
         cls,
         url: str,
     ) -> bool:
-        """
-        Detect whether AMS redirected the request back to
-        its login page.
-        """
 
         normalized_url = str(
             url or ""
@@ -376,7 +323,7 @@ class AmsAdapter:
         )
 
     # =========================================================
-    # AUTHENTICATION ERROR TEXT
+    # AUTH ERROR DETECTION
     # =========================================================
 
     @classmethod
@@ -384,12 +331,6 @@ class AmsAdapter:
         cls,
         html: str,
     ) -> bool:
-        """
-        Detect common authentication failure messages.
-
-        This is intentionally conservative so normal student
-        profile pages are not incorrectly rejected.
-        """
 
         if not html:
             return False
@@ -427,16 +368,13 @@ class AmsAdapter:
         )
 
     # =========================================================
-    # GET STUDENT PROFILE
+    # STUDENT PROFILE
     # =========================================================
 
     async def get_student_profile(
         self,
         session: dict[str, Any],
     ) -> dict[str, Any]:
-        """
-        Extract the complete student profile from AMS.
-        """
 
         client = session.get(
             "client"
@@ -451,11 +389,8 @@ class AmsAdapter:
             "dashboard_html"
         )
 
-        # =====================================================
-        # REFRESH DASHBOARD IF REQUIRED
-        # =====================================================
-
         if not html:
+
             response = await client.get(
                 self.DEFAULT_URL,
                 headers={
@@ -472,11 +407,9 @@ class AmsAdapter:
 
             html = response.text
 
-            session["dashboard_html"] = html
-
-        # =====================================================
-        # PARSE AMS PROFILE
-        # =====================================================
+            session[
+                "dashboard_html"
+            ] = html
 
         profile = parse_ams_profile(
             html
@@ -490,36 +423,52 @@ class AmsAdapter:
                 "AMS profile parser returned invalid data."
             )
 
-        # =====================================================
-        # PRESERVE IDENTIFIERS
-        # =====================================================
-
         portal_username = (
-            profile.get("portalUsername")
-            or profile.get("portal_username")
-            or session.get("portalUsername")
-            or session.get("username")
+            profile.get(
+                "portalUsername"
+            )
+            or profile.get(
+                "portal_username"
+            )
+            or session.get(
+                "portalUsername"
+            )
+            or session.get(
+                "username"
+            )
         )
 
         roll_number = (
-            profile.get("vtuNumber")
-            or profile.get("vtu_number")
-            or profile.get("registrationNumber")
-            or profile.get("registration_number")
+            profile.get(
+                "vtuNumber"
+            )
+            or profile.get(
+                "vtu_number"
+            )
+            or profile.get(
+                "registrationNumber"
+            )
+            or profile.get(
+                "registration_number"
+            )
         )
 
         if portal_username:
-            profile["portalUsername"] = str(
+            profile[
+                "portalUsername"
+            ] = str(
                 portal_username
             ).strip().upper()
 
         if roll_number:
-            profile["vtuNumber"] = str(
+            profile[
+                "vtuNumber"
+            ] = str(
                 roll_number
             ).strip()
 
         # =====================================================
-        # FETCH STUDENT PHOTO
+        # PHOTO
         # =====================================================
 
         photo_url = profile.get(
@@ -527,12 +476,14 @@ class AmsAdapter:
         )
 
         if photo_url:
+
             absolute_photo_url = urljoin(
                 self.DEFAULT_URL,
                 str(photo_url),
             )
 
             try:
+
                 photo_response = await client.get(
                     absolute_photo_url,
                     headers={
@@ -541,6 +492,7 @@ class AmsAdapter:
                 )
 
                 if photo_response.status_code == 200:
+
                     content_type = (
                         photo_response.headers
                         .get(
@@ -554,17 +506,1221 @@ class AmsAdapter:
                         "image" in content_type
                         and photo_response.content
                     ):
-                        profile["photoBytes"] = (
+                        profile[
+                            "photoBytes"
+                        ] = (
                             photo_response.content
                         )
 
             except Exception as exc:
+
                 logger.warning(
                     "AMS photo fetch warning: %s",
                     exc,
                 )
 
         return profile
+
+    # =========================================================
+    # GET TIMETABLE
+    # =========================================================
+
+    async def get_timetable(
+        self,
+        session: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+
+        details = await self.get_timetable_details(
+            session
+        )
+
+        return details.get(
+            "timetable",
+            [],
+        )
+
+    # =========================================================
+    # COMPLETE TIMETABLE DETAILS
+    # =========================================================
+
+    async def get_timetable_details(
+        self,
+        session: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Fetch complete TimeTable.aspx information.
+
+        Includes:
+            - student profile
+            - bucket
+            - registered courses
+            - timetable
+        """
+
+        client = session.get(
+            "client"
+        )
+
+        if not client:
+            raise ValueError(
+                "AMS session is missing."
+            )
+
+        response = await client.get(
+            self.TIMETABLE_URL,
+            headers={
+                "Referer": self.DEFAULT_URL,
+                "Accept": (
+                    "text/html,application/xhtml+xml,"
+                    "application/xml;q=0.9,image/avif,"
+                    "image/webp,*/*;q=0.8"
+                ),
+            },
+        )
+
+        response.raise_for_status()
+
+        if self._is_login_page(
+            str(response.url)
+        ):
+            raise AmsAuthenticationError(
+                "AMS session expired. Please login again."
+            )
+
+        html = response.text
+
+        if self._contains_authentication_error(
+            html
+        ):
+            raise AmsAuthenticationError(
+                "AMS session expired. Please login again."
+            )
+
+        if not html.strip():
+            raise RuntimeError(
+                "AMS TimeTable.aspx returned an empty response."
+            )
+
+        soup = BeautifulSoup(
+            html,
+            "html.parser",
+        )
+
+        profile = self._parse_timetable_profile(
+            soup
+        )
+
+        bucket = self._parse_bucket(
+            soup
+        )
+
+        courses = self._parse_registered_courses(
+            soup
+        )
+
+        timetable = self._parse_timetable_grid(
+            soup,
+            courses,
+        )
+
+        logger.info(
+            "AMS timetable details fetched: "
+            "profile=%s bucket=%s courses=%s timetable=%s",
+            bool(profile),
+            bool(bucket),
+            len(courses),
+            len(timetable),
+        )
+
+        return {
+            "profile": profile,
+            "bucket": bucket,
+            "courses": courses,
+            "timetable": timetable,
+        }
+
+    # =========================================================
+    # TIMETABLE PROFILE
+    # =========================================================
+
+    @classmethod
+    def _parse_timetable_profile(
+        cls,
+        soup: BeautifulSoup,
+    ) -> dict[str, Any]:
+
+        profile = {
+            "idNumber": cls._get_first_text(
+                soup,
+                [
+                    "MainContent_lblID",
+                    "MainContent_lblId",
+                    "MainContent_lblIDNumber",
+                ],
+            ),
+
+            "name": cls._get_first_text(
+                soup,
+                [
+                    "MainContent_lblName",
+                    "MainContent_lblStuname",
+                    "MainContent_lblStudentName",
+                ],
+            ),
+
+            "rollNumber": cls._get_first_text(
+                soup,
+                [
+                    "MainContent_lblrollno",
+                    "MainContent_lblRollNo",
+                    "MainContent_lblRollNumber",
+                ],
+            ),
+
+            "degree": cls._get_first_text(
+                soup,
+                [
+                    "MainContent_lblDegree",
+                ],
+            ),
+
+            "branch": cls._get_first_text(
+                soup,
+                [
+                    "MainContent_lblBranch",
+                ],
+            ),
+
+            "batch": cls._get_first_text(
+                soup,
+                [
+                    "MainContent_lblbatch",
+                    "MainContent_lblBatch",
+                ],
+            ),
+
+            "semester": cls._get_first_text(
+                soup,
+                [
+                    "MainContent_lblSemester",
+                ],
+            ),
+
+            "regulation": cls._get_first_text(
+                soup,
+                [
+                    "MainContent_lblRegulation",
+                ],
+            ),
+        }
+
+        return {
+            key: value
+            for key, value in profile.items()
+            if value not in (
+                None,
+                "",
+            )
+        }
+
+    # =========================================================
+    # BUCKET
+    # =========================================================
+
+    @classmethod
+    def _parse_bucket(
+        cls,
+        soup: BeautifulSoup,
+    ) -> str | None:
+
+        element = soup.find(
+            id="MainContent_TextBox1"
+        )
+
+        if element:
+
+            value = element.get(
+                "value"
+            )
+
+            if value:
+                return cls._clean_text(
+                    value
+                )
+
+            text = cls._clean_text(
+                element.get_text(
+                    " ",
+                    strip=True,
+                )
+            )
+
+            if text:
+                return text
+
+        label = soup.find(
+            id="MainContent_Label30"
+        )
+
+        if label:
+
+            parent = label.parent
+
+            if parent:
+
+                text = cls._clean_text(
+                    parent.get_text(
+                        " ",
+                        strip=True,
+                    )
+                )
+
+                match = re.search(
+                    r"bucket\s*:?\s*(.+)",
+                    text,
+                    flags=re.IGNORECASE,
+                )
+
+                if match:
+                    value = cls._clean_text(
+                        match.group(1)
+                    )
+
+                    if value:
+                        return value
+
+        return None
+
+    # =========================================================
+    # COURSE REGISTERED DETAILS
+    # =========================================================
+
+    @classmethod
+    def _parse_registered_courses(
+        cls,
+        soup: BeautifulSoup,
+    ) -> list[dict[str, Any]]:
+
+        table = soup.find(
+            id="MainContent_GridView3"
+        )
+
+        # -----------------------------------------------------
+        # Fallback table detection
+        # -----------------------------------------------------
+
+        if table is None:
+
+            for candidate in soup.find_all(
+                "table"
+            ):
+
+                text = cls._clean_text(
+                    candidate.get_text(
+                        " ",
+                        strip=True,
+                    )
+                ).lower()
+
+                if (
+                    "course code" in text
+                    and "course name" in text
+                ):
+                    table = candidate
+                    break
+
+        if table is None:
+
+            logger.warning(
+                "AMS registered-course table not found."
+            )
+
+            return []
+
+        rows = table.find_all(
+            "tr"
+        )
+
+        if not rows:
+            return []
+
+        # -----------------------------------------------------
+        # Find header row
+        # -----------------------------------------------------
+
+        header_index = None
+        headers: list[str] = []
+
+        for index, row in enumerate(
+            rows
+        ):
+
+            values = [
+                cls._clean_text(
+                    cell.get_text(
+                        " ",
+                        strip=True,
+                    )
+                )
+                for cell in row.find_all(
+                    ["th", "td"]
+                )
+            ]
+
+            normalized = [
+                cls._normalize_header(
+                    value
+                )
+                for value in values
+            ]
+
+            if (
+                "coursecode" in normalized
+                or "coursename" in normalized
+            ):
+
+                header_index = index
+                headers = values
+                break
+
+        if header_index is None:
+            return []
+
+        indexes = {
+            "sno": cls._find_column(
+                headers,
+                {
+                    "sno",
+                    "serialno",
+                    "serialnumber",
+                },
+            ),
+
+            "category": cls._find_column(
+                headers,
+                {
+                    "category",
+                },
+            ),
+
+            "courseCode": cls._find_column(
+                headers,
+                {
+                    "coursecode",
+                    "code",
+                },
+            ),
+
+            "courseName": cls._find_column(
+                headers,
+                {
+                    "coursename",
+                    "subjectname",
+                    "subject",
+                    "name",
+                },
+            ),
+
+            "credit": cls._find_column(
+                headers,
+                {
+                    "credit",
+                    "credits",
+                },
+            ),
+
+            "facultyName": cls._find_column(
+                headers,
+                {
+                    "facultyname",
+                    "faculty",
+                    "teacher",
+                    "staff",
+                },
+            ),
+
+            "facultyId": cls._find_column(
+                headers,
+                {
+                    "facultyid",
+                    "staffid",
+                    "teacherid",
+                },
+            ),
+
+            "slot": cls._find_column(
+                headers,
+                {
+                    "slot",
+                },
+            ),
+
+            "room": cls._find_column(
+                headers,
+                {
+                    "room",
+                    "roomno",
+                    "roomnumber",
+                    "classroom",
+                },
+            ),
+        }
+
+        courses: list[
+            dict[str, Any]
+        ] = []
+
+        for row in rows[
+            header_index + 1:
+        ]:
+
+            values = [
+                cls._clean_text(
+                    cell.get_text(
+                        " ",
+                        strip=True,
+                    )
+                )
+                for cell in row.find_all(
+                    ["th", "td"]
+                )
+            ]
+
+            if not values:
+                continue
+
+            course: dict[str, Any] = {}
+
+            for field, index in indexes.items():
+
+                if index is None:
+                    course[field] = None
+                    continue
+
+                if index >= len(values):
+                    course[field] = None
+                    continue
+
+                value = values[index]
+
+                if field == "credit":
+                    course[field] = (
+                        cls._parse_credit(
+                            value
+                        )
+                    )
+                else:
+                    course[field] = (
+                        value or None
+                    )
+
+            if not any(
+                value not in (
+                    None,
+                    "",
+                )
+                for value in course.values()
+            ):
+                continue
+
+            courses.append(
+                course
+            )
+
+        logger.info(
+            "AMS registered courses parsed: %s",
+            len(courses),
+        )
+
+        return courses
+
+    # =========================================================
+    # TIMETABLE GRID
+    # =========================================================
+
+    @classmethod
+    def _parse_timetable_grid(
+        cls,
+        soup: BeautifulSoup,
+        courses: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+
+        table = soup.find(
+            id="MainContent_GridTimetable"
+        )
+
+        # -----------------------------------------------------
+        # Fallback table detection
+        # -----------------------------------------------------
+
+        if table is None:
+
+            for candidate in soup.find_all(
+                "table"
+            ):
+
+                text = cls._clean_text(
+                    candidate.get_text(
+                        " ",
+                        strip=True,
+                    )
+                ).lower()
+
+                day_count = sum(
+                    1
+                    for day in (
+                        "monday",
+                        "tuesday",
+                        "wednesday",
+                        "thursday",
+                        "friday",
+                        "saturday",
+                        "sunday",
+                    )
+                    if day in text
+                )
+
+                if day_count >= 3:
+                    table = candidate
+                    break
+
+        if table is None:
+
+            logger.warning(
+                "AMS timetable grid not found."
+            )
+
+            return []
+
+        rows = table.find_all(
+            "tr"
+        )
+
+        if not rows:
+            return []
+
+        # -----------------------------------------------------
+        # Find header
+        # -----------------------------------------------------
+
+        header_index = None
+        headers: list[str] = []
+
+        for index, row in enumerate(
+            rows
+        ):
+
+            values = [
+                cls._clean_text(
+                    cell.get_text(
+                        " ",
+                        strip=True,
+                    )
+                )
+                for cell in row.find_all(
+                    ["th", "td"]
+                )
+            ]
+
+            if len(values) < 2:
+                continue
+
+            has_time = any(
+                cls._looks_like_time_slot(
+                    value
+                )
+                for value in values[1:]
+            )
+
+            if has_time:
+
+                header_index = index
+                headers = values
+                break
+
+        if header_index is None:
+
+            # -------------------------------------------------
+            # Fallback: first row as header
+            # -------------------------------------------------
+
+            first_row = rows[0]
+
+            headers = [
+                cls._clean_text(
+                    cell.get_text(
+                        " ",
+                        strip=True,
+                    )
+                )
+                for cell in first_row.find_all(
+                    ["th", "td"]
+                )
+            ]
+
+            if len(headers) < 2:
+                return []
+
+            header_index = 0
+
+        time_slots = headers[1:]
+
+        records: list[
+            dict[str, Any]
+        ] = []
+
+        # -----------------------------------------------------
+        # Parse day rows
+        # -----------------------------------------------------
+
+        for row in rows[
+            header_index + 1:
+        ]:
+
+            cells = row.find_all(
+                ["td", "th"]
+            )
+
+            if not cells:
+                continue
+
+            values = [
+                cls._clean_text(
+                    cell.get_text(
+                        " ",
+                        strip=True,
+                    )
+                )
+                for cell in cells
+            ]
+
+            if not values:
+                continue
+
+            day = cls._detect_day(
+                values[0]
+            )
+
+            if not day:
+                continue
+
+            # -------------------------------------------------
+            # Each timetable period
+            # -------------------------------------------------
+
+            for index, subject in enumerate(
+                values[1:]
+            ):
+
+                if index >= len(
+                    time_slots
+                ):
+                    continue
+
+                if not subject:
+                    continue
+
+                if subject.lower() in {
+                    "-",
+                    "--",
+                    "—",
+                    "free",
+                    "free hour",
+                    "none",
+                    "nil",
+                }:
+                    continue
+
+                slot = time_slots[
+                    index
+                ]
+
+                start_time, end_time = (
+                    cls._parse_time_slot(
+                        slot
+                    )
+                )
+
+                matched_course = (
+                    cls._find_course(
+                        subject,
+                        courses,
+                    )
+                )
+
+                record = {
+                    "day": day,
+
+                    "slot": slot,
+
+                    "startTime": start_time,
+
+                    "endTime": end_time,
+
+                    "subjectName": (
+                        matched_course.get(
+                            "courseName"
+                        )
+                        if matched_course
+                        else subject
+                    ),
+
+                    "courseName": (
+                        matched_course.get(
+                            "courseName"
+                        )
+                        if matched_course
+                        else subject
+                    ),
+
+                    "subjectCode": (
+                        matched_course.get(
+                            "courseCode"
+                        )
+                        if matched_course
+                        else cls._extract_course_code(
+                            subject
+                        )
+                    ),
+
+                    "faculty": (
+                        matched_course.get(
+                            "facultyName"
+                        )
+                        if matched_course
+                        else None
+                    ),
+
+                    "facultyId": (
+                        matched_course.get(
+                            "facultyId"
+                        )
+                        if matched_course
+                        else None
+                    ),
+
+                    "room": (
+                        matched_course.get(
+                            "room"
+                        )
+                        if matched_course
+                        else None
+                    ),
+
+                    "category": (
+                        matched_course.get(
+                            "category"
+                        )
+                        if matched_course
+                        else None
+                    ),
+
+                    "credit": (
+                        matched_course.get(
+                            "credit"
+                        )
+                        if matched_course
+                        else None
+                    ),
+
+                    "active": True,
+
+                    "source": "ams",
+                }
+
+                records.append(
+                    record
+                )
+
+        logger.info(
+            "AMS timetable records parsed: %s",
+            len(records),
+        )
+
+        return records
+
+    # =========================================================
+    # FIND COURSE
+    # =========================================================
+
+    @classmethod
+    def _find_course(
+        cls,
+        subject: str,
+        courses: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+
+        normalized_subject = (
+            cls._normalize_match(
+                subject
+            )
+        )
+
+        if not normalized_subject:
+            return None
+
+        for course in courses:
+
+            course_name = str(
+                course.get(
+                    "courseName"
+                )
+                or ""
+            )
+
+            course_code = str(
+                course.get(
+                    "courseCode"
+                )
+                or ""
+            )
+
+            normalized_name = (
+                cls._normalize_match(
+                    course_name
+                )
+            )
+
+            normalized_code = (
+                cls._normalize_match(
+                    course_code
+                )
+            )
+
+            # Exact course name
+            if (
+                normalized_name
+                and normalized_name
+                == normalized_subject
+            ):
+                return course
+
+            # Course name contained in timetable cell
+            if (
+                normalized_name
+                and normalized_name
+                in normalized_subject
+            ):
+                return course
+
+            # Timetable cell contained in course name
+            if (
+                normalized_subject
+                and normalized_subject
+                in normalized_name
+            ):
+                return course
+
+            # Course code match
+            if (
+                normalized_code
+                and normalized_code
+                in normalized_subject
+            ):
+                return course
+
+        return None
+
+    # =========================================================
+    # FIND COLUMN
+    # =========================================================
+
+    @classmethod
+    def _find_column(
+        cls,
+        headers: list[str],
+        names: set[str],
+    ) -> int | None:
+
+        normalized_names = {
+            cls._normalize_header(
+                name
+            )
+            for name in names
+        }
+
+        for index, header in enumerate(
+            headers
+        ):
+
+            normalized = (
+                cls._normalize_header(
+                    header
+                )
+            )
+
+            if normalized in normalized_names:
+                return index
+
+        return None
+
+    # =========================================================
+    # NORMALIZE HEADER
+    # =========================================================
+
+    @staticmethod
+    def _normalize_header(
+        value: str,
+    ) -> str:
+
+        return re.sub(
+            r"[^a-zA-Z0-9]+",
+            "",
+            str(value or ""),
+        ).lower()
+
+    # =========================================================
+    # NORMALIZE MATCH
+    # =========================================================
+
+    @staticmethod
+    def _normalize_match(
+        value: str,
+    ) -> str:
+
+        return re.sub(
+            r"[^a-zA-Z0-9]+",
+            "",
+            str(value or ""),
+        ).lower()
+
+    # =========================================================
+    # CLEAN TEXT
+    # =========================================================
+
+    @staticmethod
+    def _clean_text(
+        value: str,
+    ) -> str:
+
+        return re.sub(
+            r"\s+",
+            " ",
+            str(value or ""),
+        ).strip()
+
+    # =========================================================
+    # GET FIRST ELEMENT TEXT
+    # =========================================================
+
+    @classmethod
+    def _get_first_text(
+        cls,
+        soup: BeautifulSoup,
+        ids: list[str],
+    ) -> str | None:
+
+        for element_id in ids:
+
+            element = soup.find(
+                id=element_id
+            )
+
+            if element:
+
+                value = cls._clean_text(
+                    element.get_text(
+                        " ",
+                        strip=True,
+                    )
+                )
+
+                if value:
+                    return value
+
+                input_value = element.get(
+                    "value"
+                )
+
+                if input_value:
+                    return cls._clean_text(
+                        input_value
+                    )
+
+        return None
+
+    # =========================================================
+    # DETECT DAY
+    # =========================================================
+
+    @staticmethod
+    def _detect_day(
+        value: str,
+    ) -> str | None:
+
+        normalized = (
+            str(value or "")
+            .strip()
+            .lower()
+        )
+
+        days = {
+            "monday": "Monday",
+            "tuesday": "Tuesday",
+            "wednesday": "Wednesday",
+            "thursday": "Thursday",
+            "friday": "Friday",
+            "saturday": "Saturday",
+            "sunday": "Sunday",
+        }
+
+        # Exact match
+        if normalized in days:
+            return days[
+                normalized
+            ]
+
+        # Handle values like:
+        # Monday -
+        # Monday 1
+        # Monday:
+        for key, display in days.items():
+
+            if normalized.startswith(
+                key
+            ):
+                return display
+
+        return None
+
+    # =========================================================
+    # TIME SLOT CHECK
+    # =========================================================
+
+    @staticmethod
+    def _looks_like_time_slot(
+        value: str,
+    ) -> bool:
+
+        if not value:
+            return False
+
+        return bool(
+            re.search(
+                r"\d{1,2}\s*[:.]\s*\d{2}",
+                value,
+            )
+            and re.search(
+                r"[-–]",
+                value,
+            )
+        )
+
+    # =========================================================
+    # PARSE TIME SLOT
+    # =========================================================
+
+    @staticmethod
+    def _parse_time_slot(
+        value: str,
+    ) -> tuple[
+        str | None,
+        str | None,
+    ]:
+
+        value = re.sub(
+            r"\s+",
+            " ",
+            str(value or ""),
+        ).strip()
+
+        if not value:
+            return None, None
+
+        match = re.match(
+            r"^(.*?)\s*[-–]\s*(.*?)$",
+            value,
+        )
+
+        if not match:
+            return (
+                value,
+                None,
+            )
+
+        start = match.group(
+            1
+        ).strip()
+
+        end = match.group(
+            2
+        ).strip()
+
+        return (
+            start or None,
+            end or None,
+        )
+
+    # =========================================================
+    # PARSE CREDIT
+    # =========================================================
+
+    @staticmethod
+    def _parse_credit(
+        value: str | None,
+    ) -> int | float | str | None:
+
+        if not value:
+            return None
+
+        value = value.strip()
+
+        try:
+
+            if "." in value:
+                return float(
+                    value
+                )
+
+            return int(
+                value
+            )
+
+        except ValueError:
+
+            return value
+
+    # =========================================================
+    # EXTRACT COURSE CODE
+    # =========================================================
+
+    @staticmethod
+    def _extract_course_code(
+        value: str,
+    ) -> str | None:
+        """
+        Try to extract a course code from a timetable cell.
+
+        Example:
+            22AI301
+            CS301
+            23CSE102
+        """
+
+        if not value:
+            return None
+
+        match = re.search(
+            r"\b[A-Z]{1,6}\d{2,4}[A-Z]?\b",
+            value.upper(),
+        )
+
+        if match:
+            return match.group(
+                0
+            )
+
+        match = re.search(
+            r"\b\d{2}[A-Z]{2,6}\d{2,4}\b",
+            value.upper(),
+        )
+
+        if match:
+            return match.group(
+                0
+            )
+
+        return None
 
     # =========================================================
     # LOGOUT
@@ -574,6 +1730,7 @@ class AmsAdapter:
         self,
         session: dict[str, Any],
     ) -> None:
+
         client = session.get(
             "client"
         )
@@ -582,6 +1739,7 @@ class AmsAdapter:
             return
 
         try:
+
             await client.get(
                 self.LOGOUT_URL,
                 headers={
@@ -590,12 +1748,14 @@ class AmsAdapter:
             )
 
         except Exception as exc:
+
             logger.warning(
                 "AMS logout warning: %s",
                 exc,
             )
 
         finally:
+
             try:
                 await client.aclose()
             except Exception:
@@ -610,6 +1770,7 @@ class AmsAdapter:
         cls,
         html: str,
     ) -> bool:
+
         if not html:
             return False
 
@@ -617,10 +1778,6 @@ class AmsAdapter:
             html,
             "html.parser",
         )
-
-        # =====================================================
-        # DIRECT AMS PROFILE IDS
-        # =====================================================
 
         important_ids = [
             "MainContent_lblStuname",
@@ -641,10 +1798,6 @@ class AmsAdapter:
 
         if matches >= 2:
             return True
-
-        # =====================================================
-        # FALLBACK TEXT CHECK
-        # =====================================================
 
         page_text = soup.get_text(
             " ",

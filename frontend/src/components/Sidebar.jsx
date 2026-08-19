@@ -24,6 +24,7 @@ const studentLinks = [
       </svg>
     ),
   },
+
   {
     name: "Attendance",
     path: "/attendance",
@@ -42,6 +43,40 @@ const studentLinks = [
       </svg>
     ),
   },
+
+  // =====================================================
+  // NEW: STUDENT TIMETABLE
+  // =====================================================
+  {
+    name: "Timetable",
+    path: "/timetable",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect
+          x="3"
+          y="4"
+          width="18"
+          height="17"
+          rx="2"
+        />
+        <path d="M16 2v4" />
+        <path d="M8 2v4" />
+        <path d="M3 10h18" />
+        <path d="M8 14h2" />
+        <path d="M14 14h2" />
+        <path d="M8 18h2" />
+        <path d="M14 18h2" />
+      </svg>
+    ),
+  },
+
   {
     name: "AMS Portal",
     path: AMS_PORTAL_URL,
@@ -62,6 +97,7 @@ const studentLinks = [
       </svg>
     ),
   },
+
   {
     name: "Notifications",
     path: "/notifications",
@@ -79,6 +115,7 @@ const studentLinks = [
       </svg>
     ),
   },
+
   {
     name: "Profile",
     path: "/profile",
@@ -96,6 +133,7 @@ const studentLinks = [
       </svg>
     ),
   },
+
   {
     name: "Security",
     path: "/change-password",
@@ -108,7 +146,13 @@ const studentLinks = [
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <rect x="3" y="11" width="18" height="11" rx="2" />
+        <rect
+          x="3"
+          y="11"
+          width="18"
+          height="11"
+          rx="2"
+        />
         <path d="M7 11V7a5 5 0 0110 0v4" />
       </svg>
     ),
@@ -223,6 +267,10 @@ export default function Sidebar({
 
   return (
     <>
+      {/* =====================================================
+          MOBILE SIDEBAR
+      ===================================================== */}
+
       <div
         className={`fixed inset-0 z-[100] flex items-center justify-center lg:hidden ${
           isOpen
@@ -265,7 +313,8 @@ export default function Sidebar({
         <div className="relative flex h-[320px] w-[320px] items-center justify-center">
           {links.map((link, index) => {
             const total = links.length;
-            const angle = (360 / total) * index - 90;
+            const angle =
+              (360 / total) * index - 90;
             const radius = 120;
 
             const itemStyle = {
@@ -346,6 +395,10 @@ export default function Sidebar({
           })}
         </div>
       </div>
+
+      {/* =====================================================
+          DESKTOP SIDEBAR
+      ===================================================== */}
 
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-slate-200/50 bg-white shadow-[4px_0_24px_rgba(0,0,0,0.02)] lg:flex">
         <div className="flex h-[72px] shrink-0 items-center gap-3 border-b border-slate-100 px-6">

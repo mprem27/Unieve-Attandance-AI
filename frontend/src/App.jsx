@@ -23,6 +23,7 @@ import SubjectDetails from "./pages/SubjectDetails";
 import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
 import ChangePassword from "./pages/ChangePassword";
+import Timetable from "./pages/Timetable";
 
 // =====================================================
 // ADMIN PAGES
@@ -58,12 +59,14 @@ function DashboardLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
+
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
 
       <div className="flex min-h-screen flex-col transition-all duration-300 lg:pl-72">
+
         <Navbar
           onMenuClick={() =>
             setIsSidebarOpen(true)
@@ -73,6 +76,7 @@ function DashboardLayout({ children }) {
         <main className="min-w-0 flex-1">
           {children}
         </main>
+
       </div>
     </div>
   );
@@ -85,6 +89,7 @@ function DashboardLayout({ children }) {
 export default function App() {
   return (
     <Routes>
+
       {/* =================================================
           PUBLIC
       ================================================= */}
@@ -93,6 +98,7 @@ export default function App() {
         path="/login"
         element={<Login />}
       />
+
 
       {/* =================================================
           STUDENT
@@ -131,6 +137,23 @@ export default function App() {
         }
       />
 
+
+      {/* =================================================
+          STUDENT - TIMETABLE
+      ================================================= */}
+
+      <Route
+        path="/timetable"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout>
+              <Timetable />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+
+
       <Route
         path="/notifications"
         element={
@@ -163,6 +186,7 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+
 
       {/* =================================================
           ADMIN
@@ -201,6 +225,7 @@ export default function App() {
         }
       />
 
+
       {/* =================================================
           ADMIN - EDIT STUDENT
       ================================================= */}
@@ -238,6 +263,7 @@ export default function App() {
         }
       />
 
+
       {/* =================================================
           FALLBACK
       ================================================= */}
@@ -261,6 +287,7 @@ export default function App() {
           />
         }
       />
+
     </Routes>
   );
 }

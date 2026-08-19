@@ -6,15 +6,27 @@ import api from "./api";
 
 export const getProfile = async () => {
   const response = await api.get("/profile");
+
   return response.data;
 };
 
-export const updateProfile = async (profileData) => {
-  if (!profileData || typeof profileData !== "object") {
-    throw new Error("Profile data is required.");
+export const updateProfile = async (
+  profileData
+) => {
+  if (
+    !profileData ||
+    typeof profileData !== "object"
+  ) {
+    throw new Error(
+      "Profile data is required."
+    );
   }
 
-  const response = await api.put("/profile", profileData);
+  const response = await api.put(
+    "/profile",
+    profileData
+  );
+
   return response.data;
 };
 
@@ -22,79 +34,96 @@ export const updateProfile = async (profileData) => {
 // PORTAL / VELTECH AMS CREDENTIALS
 // =====================================================
 
-export const getPortalCredentials = async () => {
-  const response = await api.get(
-    "/profile/portal-credentials"
-  );
-
-  return response.data;
-};
-
-export const updatePortalCredentials = async (
-  credentials
-) => {
-  if (!credentials || typeof credentials !== "object") {
-    throw new Error("Credentials are required.");
-  }
-
-  const portalUsername = String(
-    credentials.portalUsername ||
-      credentials.portal_username ||
-      credentials.vtuNumber ||
-      credentials.vtu_number ||
-      ""
-  )
-    .trim()
-    .toUpperCase();
-
-  const portalPassword = String(
-    credentials.portalPassword ||
-      credentials.portal_password ||
-      ""
-  ).trim();
-
-  if (!portalUsername) {
-    throw new Error("VTU number is required.");
-  }
-
-  if (!/^VTU\d+$/i.test(portalUsername)) {
-    throw new Error(
-      "AMS username must be your VTU number. Example: VTU26381."
+export const getPortalCredentials =
+  async () => {
+    const response = await api.get(
+      "/profile/portal-credentials"
     );
-  }
 
-  if (!portalPassword) {
-    throw new Error("AMS password is required.");
-  }
-
-  const payload = {
-    portalUsername,
-    portalPassword,
+    return response.data;
   };
 
-  delete payload.parentPortalPassword;
-  delete payload.parent_portal_password;
+export const updatePortalCredentials =
+  async (credentials) => {
+    if (
+      !credentials ||
+      typeof credentials !== "object"
+    ) {
+      throw new Error(
+        "Credentials are required."
+      );
+    }
 
-  const response = await api.put(
-    "/profile/portal-credentials",
-    payload
-  );
+    const portalUsername = String(
+      credentials.portalUsername ||
+        credentials.portal_username ||
+        credentials.vtuNumber ||
+        credentials.vtu_number ||
+        ""
+    )
+      .trim()
+      .toUpperCase();
 
-  return response.data;
-};
+    const portalPassword = String(
+      credentials.portalPassword ||
+        credentials.portal_password ||
+        ""
+    ).trim();
+
+    if (!portalUsername) {
+      throw new Error(
+        "VTU number is required."
+      );
+    }
+
+    if (
+      !/^VTU\d+$/i.test(
+        portalUsername
+      )
+    ) {
+      throw new Error(
+        "AMS username must be your VTU number. Example: VTU26381."
+      );
+    }
+
+    if (!portalPassword) {
+      throw new Error(
+        "AMS password is required."
+      );
+    }
+
+    const payload = {
+      portalUsername,
+      portalPassword,
+    };
+
+    const response = await api.put(
+      "/profile/portal-credentials",
+      payload
+    );
+
+    return response.data;
+  };
 
 // =====================================================
 // ADMIN USERS
 // =====================================================
 
 export const getUsers = async () => {
-  const response = await api.get("/admin/users");
+  const response = await api.get(
+    "/admin/users"
+  );
+
   return response.data;
 };
 
-export const getUser = async (userId) => {
+export const getUser = async (
+  userId
+) => {
   if (!userId) {
-    throw new Error("User ID is required.");
+    throw new Error(
+      "User ID is required."
+    );
   }
 
   const response = await api.get(
@@ -108,14 +137,25 @@ export const getUser = async (userId) => {
 // CREATE STUDENT
 // =====================================================
 
-export const createUser = async (userData) => {
-  if (!userData || typeof userData !== "object") {
-    throw new Error("User data is required.");
+export const createUser = async (
+  userData
+) => {
+  if (
+    !userData ||
+    typeof userData !== "object"
+  ) {
+    throw new Error(
+      "User data is required."
+    );
   }
 
   const payload = {
     ...userData,
   };
+
+  // ---------------------------------------------------
+  // NORMALIZE VTU NUMBER
+  // ---------------------------------------------------
 
   if (payload.vtuNumber) {
     payload.vtuNumber = String(
@@ -125,19 +165,28 @@ export const createUser = async (userData) => {
       .toUpperCase();
   }
 
-  const hasPortalUsername = Boolean(
-    String(
-      payload.portalUsername || ""
-    ).trim()
-  );
+  // ---------------------------------------------------
+  // AMS CREDENTIALS
+  // ---------------------------------------------------
 
-  const hasPortalPassword = Boolean(
-    String(
-      payload.portalPassword || ""
-    ).trim()
-  );
+  const hasPortalUsername =
+    Boolean(
+      String(
+        payload.portalUsername || ""
+      ).trim()
+    );
 
-  if (hasPortalUsername || hasPortalPassword) {
+  const hasPortalPassword =
+    Boolean(
+      String(
+        payload.portalPassword || ""
+      ).trim()
+    );
+
+  if (
+    hasPortalUsername ||
+    hasPortalPassword
+  ) {
     if (!payload.vtuNumber) {
       throw new Error(
         "VTU number is required when AMS credentials are provided."
@@ -153,13 +202,18 @@ export const createUser = async (userData) => {
     payload.portalUsername =
       payload.vtuNumber;
 
-    payload.portalPassword = String(
-      payload.portalPassword
-    ).trim();
+    payload.portalPassword =
+      String(
+        payload.portalPassword
+      ).trim();
   } else {
     delete payload.portalUsername;
     delete payload.portalPassword;
   }
+
+  // ---------------------------------------------------
+  // CREATE
+  // ---------------------------------------------------
 
   const response = await api.post(
     "/admin/users",
@@ -178,16 +232,27 @@ export const updateUser = async (
   userData
 ) => {
   if (!userId) {
-    throw new Error("User ID is required.");
+    throw new Error(
+      "User ID is required."
+    );
   }
 
-  if (!userData || typeof userData !== "object") {
-    throw new Error("User data is required.");
+  if (
+    !userData ||
+    typeof userData !== "object"
+  ) {
+    throw new Error(
+      "User data is required."
+    );
   }
 
   const payload = {
     ...userData,
   };
+
+  // ---------------------------------------------------
+  // NORMALIZE VTU NUMBER
+  // ---------------------------------------------------
 
   if (payload.vtuNumber) {
     payload.vtuNumber = String(
@@ -196,6 +261,10 @@ export const updateUser = async (
       .trim()
       .toUpperCase();
   }
+
+  // ---------------------------------------------------
+  // AMS CREDENTIALS
+  // ---------------------------------------------------
 
   if (
     payload.portalUsername ||
@@ -211,13 +280,18 @@ export const updateUser = async (
       payload.vtuNumber;
 
     if (payload.portalPassword) {
-      payload.portalPassword = String(
-        payload.portalPassword
-      ).trim();
+      payload.portalPassword =
+        String(
+          payload.portalPassword
+        ).trim();
     } else {
       delete payload.portalPassword;
     }
   }
+
+  // ---------------------------------------------------
+  // UPDATE
+  // ---------------------------------------------------
 
   const response = await api.put(
     `/admin/users/${userId}`,
@@ -231,9 +305,13 @@ export const updateUser = async (
 // DELETE / DEACTIVATE STUDENT
 // =====================================================
 
-export const deleteUser = async (userId) => {
+export const deleteUser = async (
+  userId
+) => {
   if (!userId) {
-    throw new Error("User ID is required.");
+    throw new Error(
+      "User ID is required."
+    );
   }
 
   const response = await api.delete(
@@ -247,9 +325,13 @@ export const deleteUser = async (userId) => {
 // ADMIN USER ACTIVATION
 // =====================================================
 
-export const activateUser = async (userId) => {
+export const activateUser = async (
+  userId
+) => {
   if (!userId) {
-    throw new Error("User ID is required.");
+    throw new Error(
+      "User ID is required."
+    );
   }
 
   const response = await api.post(

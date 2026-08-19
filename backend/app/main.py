@@ -103,31 +103,69 @@ app.add_middleware(
 
 API_PREFIX = settings.api_v1_prefix
 
-# Keep all existing application routers.
+
+# ---------------------------------------------------------
+# AUTH
+# ---------------------------------------------------------
+
 app.include_router(
     auth.router,
     prefix=API_PREFIX,
 )
+
+
+# ---------------------------------------------------------
+# PROFILE
+# ---------------------------------------------------------
 
 app.include_router(
     profile.router,
     prefix=API_PREFIX,
 )
 
+
+# ---------------------------------------------------------
+# ATTENDANCE
+# ---------------------------------------------------------
+#
+# EXISTING WORKING ATTENDANCE CODE.
+# DO NOT MODIFY FOR TIMETABLE.
+#
+
 app.include_router(
     attendance.router,
     prefix=API_PREFIX,
 )
+
+
+# ---------------------------------------------------------
+# SUBJECTS
+# ---------------------------------------------------------
 
 app.include_router(
     subjects.router,
     prefix=API_PREFIX,
 )
 
+
+# ---------------------------------------------------------
+# TIMETABLE
+# ---------------------------------------------------------
+#
+# NEW TIMETABLE ROUTER.
+# This only exposes timetable data.
+# It does NOT replace the attendance router.
+#
+
 app.include_router(
     timetable.router,
     prefix=API_PREFIX,
 )
+
+
+# ---------------------------------------------------------
+# NOTIFICATIONS
+# ---------------------------------------------------------
 
 app.include_router(
     notifications.router,
@@ -139,13 +177,14 @@ app.include_router(
 # ADMIN ROUTES
 # =========================================================
 #
-# Register the admin router after all normal application
-# routers. The admin router already has its /admin prefix,
-# therefore the final URLs become:
+# The admin router already contains its /admin prefix.
+#
+# Final URLs:
 #
 # /api/v1/admin/...
 #
-# No admin route logic is changed here.
+# No admin logic is changed here.
+# =========================================================
 
 app.include_router(
     admin.router,

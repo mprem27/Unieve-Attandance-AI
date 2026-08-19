@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 
@@ -15,6 +14,10 @@ import {
   getProfile,
   updateProfile,
 } from "../services/profileService";
+
+import {
+  syncStudentAcademicDetails,
+} from "../services/timetableService";
 
 import {
   formatDate,
@@ -37,10 +40,6 @@ const displayValue = (value) => {
   return String(value);
 };
 
-// =====================================================
-// FIRST AVAILABLE VALUE
-// =====================================================
-
 const firstValue = (...values) => {
   for (const value of values) {
     if (
@@ -55,10 +54,6 @@ const firstValue = (...values) => {
   return "";
 };
 
-// =====================================================
-// INITIALS
-// =====================================================
-
 const getInitials = (name) => {
   if (!name) {
     return "U";
@@ -70,87 +65,39 @@ const getInitials = (name) => {
     .filter(Boolean);
 
   if (parts.length === 1) {
-    return parts[0][0]?.toUpperCase() || "U";
+    return (
+      parts[0][0]?.toUpperCase() ||
+      "U"
+    );
   }
 
   return (
-    `${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`
+    `${parts[0][0] || ""}${
+      parts[parts.length - 1][0] || ""
+    }`
   ).toUpperCase();
-};
-
-// =====================================================
-// OBJECT VALUE
-// =====================================================
-
-const getNestedValue = (object, paths = []) => {
-  for (const path of paths) {
-    const parts = path.split(".");
-    let current = object;
-
-    for (const part of parts) {
-      if (
-        current === null ||
-        current === undefined
-      ) {
-        current = undefined;
-        break;
-      }
-
-      current = current[part];
-    }
-
-    if (
-      current !== undefined &&
-      current !== null &&
-      current !== ""
-    ) {
-      return current;
-    }
-  }
-
-  return "";
 };
 
 // =====================================================
 // NORMALIZE PROFILE
 // =====================================================
 
-const normalizeProfile = (data = {}) => {
-  /*
-   * AMS information may arrive:
-   *
-   * 1. Directly:
-   *    {
-   *      name: "...",
-   *      gender: "...",
-   *      fatherName: "..."
-   *    }
-   *
-   * 2. Inside:
-   *    amsProfile: {...}
-   *
-   * 3. Inside:
-   *    studentProfile: {...}
-   *
-   * 4. Inside:
-   *    portalProfile: {...}
-   */
-
-  const amsProfile =
-    data.amsProfile ||
-    data.ams_profile ||
-    data.studentProfile ||
-    data.student_profile ||
-    data.portalProfile ||
-    data.portal_profile ||
-    {};
+const normalizeProfile = (
+  data = {},
+  amsProfile = {}
+) => {
+  const profile =
+    amsProfile &&
+    typeof amsProfile === "object"
+      ? amsProfile
+      : {};
 
   return {
     ...data,
 
-    // ===================================================
+    // ---------------------------------------------------
     // BASIC
-    // ===================================================
+    // ---------------------------------------------------
 
     id: firstValue(
       data.id,
@@ -165,20 +112,22 @@ const normalizeProfile = (data = {}) => {
       data.full_name,
       data.studentName,
       data.student_name,
-      amsProfile.name,
-      amsProfile.fullName,
-      amsProfile.full_name,
-      amsProfile.studentName,
-      amsProfile.student_name
+
+      profile.name,
+      profile.fullName,
+      profile.full_name,
+      profile.studentName,
+      profile.student_name
     ),
 
     email: firstValue(
       data.email,
       data.emailAddress,
       data.email_address,
-      amsProfile.email,
-      amsProfile.emailAddress,
-      amsProfile.email_address
+
+      profile.email,
+      profile.emailAddress,
+      profile.email_address
     ),
 
     role: firstValue(
@@ -188,29 +137,29 @@ const normalizeProfile = (data = {}) => {
       "student"
     ),
 
-    // ===================================================
+    // ---------------------------------------------------
     // STUDENT IDENTIFICATION
-    // ===================================================
+    // ---------------------------------------------------
 
-    // VTU number is the portal identifier.
-    // Example: VTU26381
-    // NEVER fall back to roll/registration number here.
+    studentId: firstValue(
+      data.studentId,
+      data.student_id,
+      profile.studentId,
+      profile.student_id
+    ),
+
     vtuNumber: firstValue(
       data.vtuNumber,
       data.vtu_number,
-
       data.portalUsername,
       data.portal_username,
 
-      amsProfile.vtuNumber,
-      amsProfile.vtu_number,
-
-      amsProfile.portalUsername,
-      amsProfile.portal_username
+      profile.vtuNumber,
+      profile.vtu_number,
+      profile.portalUsername,
+      profile.portal_username
     ),
 
-    // College roll / registration number is separate.
-    // Example: 23UECS1039
     rollNumber: firstValue(
       data.rollNumber,
       data.roll_number,
@@ -218,56 +167,42 @@ const normalizeProfile = (data = {}) => {
       data.registrationNumber,
       data.registration_number,
 
-      amsProfile.rollNumber,
-      amsProfile.roll_number,
+      profile.rollNumber,
+      profile.roll_number,
 
-      amsProfile.registrationNumber,
-      amsProfile.registration_number
+      profile.registrationNumber,
+      profile.registration_number
     ),
 
-    studentId: firstValue(
-      data.studentId,
-      data.student_id,
-
-      amsProfile.studentId,
-      amsProfile.student_id,
-
-      data.id,
-      data._id
-    ),
-
-    // ===================================================
-    // PERSONAL INFORMATION
-    // ===================================================
+    // ---------------------------------------------------
+    // PERSONAL
+    // ---------------------------------------------------
 
     gender: firstValue(
       data.gender,
       data.sex,
-
-      amsProfile.gender,
-      amsProfile.sex
+      profile.gender,
+      profile.sex
     ),
 
     fatherName: firstValue(
       data.fatherName,
       data.father_name,
-
       data.father,
 
-      amsProfile.fatherName,
-      amsProfile.father_name,
-      amsProfile.father
+      profile.fatherName,
+      profile.father_name,
+      profile.father
     ),
 
     motherName: firstValue(
       data.motherName,
       data.mother_name,
-
       data.mother,
 
-      amsProfile.motherName,
-      amsProfile.mother_name,
-      amsProfile.mother
+      profile.motherName,
+      profile.mother_name,
+      profile.mother
     ),
 
     dateOfBirth: firstValue(
@@ -275,59 +210,162 @@ const normalizeProfile = (data = {}) => {
       data.date_of_birth,
       data.dob,
 
-      amsProfile.dateOfBirth,
-      amsProfile.date_of_birth,
-      amsProfile.dob
+      profile.dateOfBirth,
+      profile.date_of_birth,
+      profile.dob
     ),
+
+    nationality: firstValue(
+      data.nationality,
+      profile.nationality
+    ),
+
+    community: firstValue(
+      data.community,
+      data.caste,
+      profile.community,
+      profile.caste
+    ),
+
+    religion: firstValue(
+      data.religion,
+      profile.religion
+    ),
+
+    // ---------------------------------------------------
+    // ACADEMIC
+    // ---------------------------------------------------
 
     degree: firstValue(
       data.degree,
       data.program,
       data.course,
 
-      amsProfile.degree,
-      amsProfile.program,
-      amsProfile.course
+      profile.degree,
+      profile.program,
+      profile.course
     ),
 
-    community: firstValue(
-      data.community,
-      data.caste,
+    branch: firstValue(
+      data.branch,
+      data.department,
+      data.dept,
 
-      amsProfile.community,
-      amsProfile.caste
+      profile.branch,
+      profile.department,
+      profile.dept
     ),
 
-    religion: firstValue(
-      data.religion,
+    year: firstValue(
+      data.year,
+      data.studyYear,
+      data.study_year,
 
-      amsProfile.religion
+      profile.year,
+      profile.studyYear,
+      profile.study_year
     ),
 
-    nationality: firstValue(
-      data.nationality,
+    semester: firstValue(
+      data.semester,
+      data.sem,
 
-      amsProfile.nationality
+      profile.semester,
+      profile.sem
     ),
 
-    // ===================================================
-    // GOVERNMENT / ACADEMIC IDS
-    // ===================================================
+    section: firstValue(
+      data.section,
+      data.classSection,
+      data.class_section,
+
+      profile.section,
+      profile.classSection,
+      profile.class_section
+    ),
+
+    batch: firstValue(
+      data.batch,
+      data.batchName,
+      data.batch_name,
+
+      profile.batch,
+      profile.batchName,
+      profile.batch_name
+    ),
+
+    regulation: firstValue(
+      data.regulation,
+      data.regulationName,
+      data.regulation_name,
+
+      profile.regulation,
+      profile.regulationName,
+      profile.regulation_name
+    ),
+
+    // ---------------------------------------------------
+    // CONTACT
+    // ---------------------------------------------------
+
+    phoneNumber: firstValue(
+      data.phoneNumber,
+      data.phone_number,
+      data.phone,
+
+      data.mobileNumber,
+      data.mobile_number,
+      data.mobile,
+
+      profile.phoneNumber,
+      profile.phone_number,
+      profile.phone,
+
+      profile.mobileNumber,
+      profile.mobile_number,
+      profile.mobile
+    ),
+
+    parentName: firstValue(
+      data.parentName,
+      data.parent_name,
+
+      data.guardianName,
+      data.guardian_name,
+
+      profile.parentName,
+      profile.parent_name,
+
+      profile.guardianName,
+      profile.guardian_name
+    ),
+
+    parentPhone: firstValue(
+      data.parentPhone,
+      data.parent_phone,
+
+      data.guardianPhone,
+      data.guardian_phone,
+
+      profile.parentPhone,
+      profile.parent_phone,
+
+      profile.guardianPhone,
+      profile.guardian_phone
+    ),
+
+    // ---------------------------------------------------
+    // IDENTIFICATION
+    // ---------------------------------------------------
 
     aadhaarNumber: firstValue(
       data.aadhaarNumber,
       data.aadhaar_number,
       data.aadhaar,
 
-      data.aadhaarNo,
-      data.aadhaar_no,
-
-      amsProfile.aadhaarNumber,
-      amsProfile.aadhaar_number,
-      amsProfile.aadhaar,
-
-      amsProfile.aadhaarNo,
-      amsProfile.aadhaar_no
+      profile.aadhaarNumber,
+      profile.aadhaar_number,
+      profile.aadhaar
     ),
 
     academicBankCreditsId: firstValue(
@@ -340,121 +378,19 @@ const normalizeProfile = (data = {}) => {
       data.abcId,
       data.abc_id,
 
-      amsProfile.academicBankCreditsId,
-      amsProfile.academic_bank_credits_id,
+      profile.academicBankCreditsId,
+      profile.academic_bank_credits_id,
 
-      amsProfile.academicBankOfCreditsId,
-      amsProfile.academic_bank_of_credits_id,
+      profile.academicBankOfCreditsId,
+      profile.academic_bank_of_credits_id,
 
-      amsProfile.abcId,
-      amsProfile.abc_id
+      profile.abcId,
+      profile.abc_id
     ),
 
-    // ===================================================
-    // CONTACT
-    // ===================================================
-
-    phoneNumber: firstValue(
-      data.phoneNumber,
-      data.phone_number,
-      data.phone,
-
-      data.mobileNumber,
-      data.mobile_number,
-      data.mobile,
-
-      amsProfile.phoneNumber,
-      amsProfile.phone_number,
-      amsProfile.phone,
-
-      amsProfile.mobileNumber,
-      amsProfile.mobile_number,
-      amsProfile.mobile
-    ),
-
-    parentName: firstValue(
-      data.parentName,
-      data.parent_name,
-
-      data.guardianName,
-      data.guardian_name,
-
-      amsProfile.parentName,
-      amsProfile.parent_name,
-
-      amsProfile.guardianName,
-      amsProfile.guardian_name
-    ),
-
-    parentPhone: firstValue(
-      data.parentPhone,
-      data.parent_phone,
-
-      data.guardianPhone,
-      data.guardian_phone,
-
-      amsProfile.parentPhone,
-      amsProfile.parent_phone,
-
-      amsProfile.guardianPhone,
-      amsProfile.guardian_phone
-    ),
-
-    // ===================================================
-    // ACADEMIC
-    // ===================================================
-
-    branch: firstValue(
-      data.branch,
-      data.department,
-      data.dept,
-
-      amsProfile.branch,
-      amsProfile.department,
-      amsProfile.dept
-    ),
-
-    year: firstValue(
-      data.year,
-      data.studyYear,
-      data.study_year,
-
-      amsProfile.year,
-      amsProfile.studyYear,
-      amsProfile.study_year
-    ),
-
-    semester: firstValue(
-      data.semester,
-      data.sem,
-
-      amsProfile.semester,
-      amsProfile.sem
-    ),
-
-    section: firstValue(
-      data.section,
-      data.classSection,
-      data.class_section,
-
-      amsProfile.section,
-      amsProfile.classSection,
-      amsProfile.class_section
-    ),
-
-    batch: firstValue(
-      data.batch,
-      data.batchName,
-      data.batch_name,
-
-      amsProfile.batch,
-      amsProfile.batchName,
-      amsProfile.batch_name
-    ),
-
-    // ===================================================
+    // ---------------------------------------------------
     // PHOTO
-    // ===================================================
+    // ---------------------------------------------------
 
     photoUrl: firstValue(
       data.photoUrl,
@@ -463,16 +399,16 @@ const normalizeProfile = (data = {}) => {
       data.profile_image,
       data.avatar,
 
-      amsProfile.photoUrl,
-      amsProfile.photo_url,
-      amsProfile.profileImage,
-      amsProfile.profile_image,
-      amsProfile.avatar
+      profile.photoUrl,
+      profile.photo_url,
+      profile.profileImage,
+      profile.profile_image,
+      profile.avatar
     ),
 
-    // ===================================================
-    // NOTIFICATIONS
-    // ===================================================
+    // ---------------------------------------------------
+    // SETTINGS
+    // ---------------------------------------------------
 
     smsEnabled:
       data.smsEnabled ??
@@ -484,9 +420,9 @@ const normalizeProfile = (data = {}) => {
       data.notifications_enabled ??
       true,
 
-    // ===================================================
+    // ---------------------------------------------------
     // ACCOUNT
-    // ===================================================
+    // ---------------------------------------------------
 
     active:
       data.active ??
@@ -499,12 +435,10 @@ const normalizeProfile = (data = {}) => {
       data.force_password_change ??
       false,
 
-    // ===================================================
+    // ---------------------------------------------------
     // PORTAL
-    // ===================================================
+    // ---------------------------------------------------
 
-    // AMS username and Parent Portal login are both VTU number.
-    // Parent Portal does not require a password.
     portalUsername: firstValue(
       data.portalUsername,
       data.portal_username,
@@ -512,11 +446,11 @@ const normalizeProfile = (data = {}) => {
       data.vtuNumber,
       data.vtu_number,
 
-      amsProfile.portalUsername,
-      amsProfile.portal_username,
+      profile.portalUsername,
+      profile.portal_username,
 
-      amsProfile.vtuNumber,
-      amsProfile.vtu_number
+      profile.vtuNumber,
+      profile.vtu_number
     ),
 
     portalCredentialsConfigured:
@@ -540,71 +474,162 @@ const normalizeProfile = (data = {}) => {
       data.syncedAt,
       data.synced_at,
 
-      amsProfile.lastSyncedAt,
-      amsProfile.last_synced_at
+      profile.lastSyncedAt,
+      profile.last_synced_at
     ),
   };
 };
 
 // =====================================================
-// INFORMATION ROW
+// INFO ITEM
 // =====================================================
 
-function InfoRow({
+function InfoItem({
   label,
   value,
   mono = false,
 }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-      <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:text-xs">
+    <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
         {label}
-      </span>
+      </p>
 
-      <span
-        className={`break-words text-sm font-bold text-slate-700 sm:text-right ${
+      <p
+        className={`mt-2 break-words text-sm font-bold text-slate-800 ${
           mono
             ? "font-mono tracking-wide"
             : ""
         }`}
       >
         {displayValue(value)}
-      </span>
+      </p>
     </div>
   );
 }
 
 // =====================================================
-// SECTION HEADER
+// SECTION
 // =====================================================
 
-function SectionHeader({
+function Section({
   title,
   description,
-  icon,
+  children,
 }) {
   return (
-    <div className="border-b border-slate-100 p-6 sm:px-8 sm:py-6">
-      <div className="flex items-start gap-3">
+    <section className="overflow-hidden rounded-3xl border border-slate-200/70 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+      <div className="border-b border-slate-100 px-6 py-5 sm:px-8">
+        <h2 className="text-lg font-bold tracking-tight text-slate-900">
+          {title}
+        </h2>
 
-        {icon && (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-            {icon}
-          </div>
+        {description && (
+          <p className="mt-1 text-sm font-medium text-slate-500">
+            {description}
+          </p>
         )}
+      </div>
 
-        <div>
-          <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
-            {title}
-          </h2>
+      <div className="p-6 sm:p-8">
+        {children}
+      </div>
+    </section>
+  );
+}
 
-          {description && (
-            <p className="mt-1 text-sm font-medium text-slate-500">
-              {description}
-            </p>
-          )}
+// =====================================================
+// COURSE CARD
+// =====================================================
+
+function CourseCard({
+  course,
+  index,
+}) {
+  const courseName = firstValue(
+    course.courseName,
+    course.subjectName,
+    course.name,
+    course.course
+  );
+
+  const courseCode = firstValue(
+    course.courseCode,
+    course.subjectCode,
+    course.code
+  );
+
+  const credits = firstValue(
+    course.credit,
+    course.credits,
+    course.creditHours
+  );
+
+  const faculty = firstValue(
+    course.facultyName,
+    course.faculty,
+    course.teacher,
+    course.staff
+  );
+
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-5 transition hover:border-indigo-100 hover:bg-indigo-50/30">
+      <div className="flex gap-4">
+
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-sm font-black text-indigo-600">
+          {index + 1}
         </div>
 
+        <div className="min-w-0 flex-1">
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+
+            <div>
+              <h3 className="break-words text-sm font-bold text-slate-900">
+                {displayValue(
+                  courseName
+                )}
+              </h3>
+
+              <p className="mt-1 font-mono text-xs font-bold text-indigo-600">
+                {displayValue(
+                  courseCode
+                )}
+              </p>
+            </div>
+
+            {course.category && (
+              <span className="w-fit rounded-full bg-indigo-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+                {displayValue(
+                  course.category
+                )}
+              </span>
+            )}
+
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+
+            <InfoItem
+              label="Credits"
+              value={credits}
+            />
+
+            <InfoItem
+              label="Faculty"
+              value={faculty}
+            />
+
+            <InfoItem
+              label="Faculty ID"
+              value={
+                course.facultyId
+              }
+              mono
+            />
+
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -622,8 +647,16 @@ export default function Profile() {
 
   const [profile, setProfile] =
     useState(
-      normalizeProfile(user || {})
+      normalizeProfile(
+        user || {}
+      )
     );
+
+  const [bucket, setBucket] =
+    useState("");
+
+  const [courses, setCourses] =
+    useState([]);
 
   const [form, setForm] =
     useState({
@@ -648,7 +681,7 @@ export default function Profile() {
     useState("");
 
   // =====================================================
-  // LOAD PROFILE
+  // LOAD DATA
   // =====================================================
 
   const loadProfile =
@@ -657,37 +690,52 @@ export default function Profile() {
         setLoading(true);
         setError("");
 
-        const response =
+        const profileResponse =
           await getProfile();
 
-        /*
-         * profileService currently returns
-         * response.data.
-         *
-         * This also supports a response like:
-         *
-         * {
-         *   data: {...}
-         * }
-         */
-
         const rawProfile =
-          response?.data &&
-          typeof response.data ===
+          profileResponse?.data &&
+          typeof profileResponse.data ===
             "object" &&
           !Array.isArray(
-            response.data
+            profileResponse.data
           )
-            ? response.data
-            : response || {};
+            ? profileResponse.data
+            : profileResponse || {};
+
+        let academicDetails = null;
+
+        try {
+          academicDetails =
+            await syncStudentAcademicDetails();
+        } catch (amsError) {
+          console.warn(
+            "AMS academic sync failed:",
+            amsError
+          );
+        }
 
         const profileData =
           normalizeProfile(
-            rawProfile
+            rawProfile,
+            academicDetails?.profile ||
+              {}
           );
 
         setProfile(
           profileData
+        );
+
+        setBucket(
+          academicDetails?.bucket || ""
+        );
+
+        setCourses(
+          Array.isArray(
+            academicDetails?.courses
+          )
+            ? academicDetails.courses
+            : []
         );
 
         setForm({
@@ -698,20 +746,14 @@ export default function Profile() {
             profileData.notificationsEnabled,
         });
 
-        // -------------------------------------------------
-        // UPDATE AUTH CONTEXT
-        // -------------------------------------------------
-
         if (
           typeof setUser ===
           "function"
         ) {
-          setUser(profileData);
+          setUser(
+            profileData
+          );
         }
-
-        // -------------------------------------------------
-        // UPDATE LOCAL STORAGE
-        // -------------------------------------------------
 
         localStorage.setItem(
           "user",
@@ -732,16 +774,12 @@ export default function Profile() {
       }
     }, [setUser]);
 
-  // =====================================================
-  // INITIAL LOAD
-  // =====================================================
-
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
 
   // =====================================================
-  // HANDLE SETTINGS
+  // FORM
   // =====================================================
 
   const handleChange = (
@@ -761,10 +799,6 @@ export default function Profile() {
     }));
   };
 
-  // =====================================================
-  // SAVE SETTINGS
-  // =====================================================
-
   const handleSubmit = async (
     event
   ) => {
@@ -775,22 +809,18 @@ export default function Profile() {
       setError("");
       setSuccess("");
 
-      const payload = {
-        smsEnabled:
-          Boolean(
-            form.smsEnabled
-          ),
-
-        notificationsEnabled:
-          Boolean(
-            form.notificationsEnabled
-          ),
-      };
-
       const response =
-        await updateProfile(
-          payload
-        );
+        await updateProfile({
+          smsEnabled:
+            Boolean(
+              form.smsEnabled
+            ),
+
+          notificationsEnabled:
+            Boolean(
+              form.notificationsEnabled
+            ),
+        });
 
       const responseData =
         response?.data &&
@@ -817,14 +847,6 @@ export default function Profile() {
         updatedProfile
       );
 
-      setForm({
-        smsEnabled:
-          updatedProfile.smsEnabled,
-
-        notificationsEnabled:
-          updatedProfile.notificationsEnabled,
-      });
-
       if (
         typeof setUser ===
         "function"
@@ -842,7 +864,7 @@ export default function Profile() {
       );
 
       setSuccess(
-        "Your notification preferences were updated successfully."
+        "Notification preferences saved successfully."
       );
 
       window.setTimeout(() => {
@@ -869,10 +891,6 @@ export default function Profile() {
     return <Loading fullPage />;
   }
 
-  // =====================================================
-  // DISPLAY USER
-  // =====================================================
-
   const displayUser =
     profile || user || {};
 
@@ -881,56 +899,34 @@ export default function Profile() {
   // =====================================================
 
   return (
-    <div className="min-h-[calc(100vh-72px)] bg-slate-50/50 p-4 sm:p-6 lg:p-8 xl:p-10">
+    <div className="min-h-[calc(100vh-72px)] bg-slate-50/60 p-4 sm:p-6 lg:p-8">
 
-      <div className="mx-auto max-w-[1500px]">
+      <div className="mx-auto max-w-7xl">
 
         {/* ================================================= */}
-        {/* HEADER */}
+        {/* PAGE HEADER */}
         {/* ================================================= */}
 
         <div className="mb-8">
 
-          <div className="flex items-center gap-2">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">
+            Student Account
+          </p>
 
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-                />
-              </svg>
-
-            </span>
-
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">
-              Account
-            </span>
-
-          </div>
-
-          <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
             My Profile
           </h1>
 
-          <p className="mt-1 max-w-3xl text-sm font-medium text-slate-500 sm:text-base">
-            View your complete student information,
-            academic details, personal information,
-            account status and notification preferences.
+          <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-500">
+            Manage and view your student,
+            academic, contact and AMS information
+            in one place.
           </p>
 
         </div>
 
         {/* ================================================= */}
-        {/* ERROR */}
+        {/* ALERTS */}
         {/* ================================================= */}
 
         {error && (
@@ -942,59 +938,27 @@ export default function Profile() {
           </div>
         )}
 
-        {/* ================================================= */}
-        {/* SUCCESS */}
-        {/* ================================================= */}
-
         {success && (
-
-          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-emerald-200/60 bg-emerald-50 p-4">
-
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-
-              <svg
-                className="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4.5 12.75l6 6 9-13.5"
-                />
-              </svg>
-
-            </div>
-
-            <p className="text-sm font-bold text-emerald-700">
-              {success}
-            </p>
-
+          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-700">
+            {success}
           </div>
         )}
 
         {/* ================================================= */}
-        {/* MAIN GRID */}
+        {/* PROFILE HERO */}
         {/* ================================================= */}
 
-        <div className="grid gap-6 lg:grid-cols-3 lg:gap-8">
+        <div className="mb-6 overflow-hidden rounded-3xl border border-slate-200/70 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
 
-          {/* ================================================= */}
-          {/* LEFT */}
-          {/* ================================================= */}
+          <div className="p-6 sm:p-8">
 
-          <div className="space-y-6">
+            <div className="flex flex-col gap-6 md:flex-row md:items-center">
 
-            {/* PROFILE CARD */}
+              {/* PHOTO */}
 
-            <div className="rounded-3xl border border-slate-200/60 bg-white p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:p-8">
-
-              <div className="flex flex-col items-center text-center">
+              <div className="shrink-0">
 
                 {displayUser.photoUrl ? (
-
                   <img
                     src={
                       displayUser.photoUrl
@@ -1003,52 +967,39 @@ export default function Profile() {
                       displayUser.name ||
                       "Student"
                     }
-                    className="h-28 w-28 rounded-full object-cover shadow-lg ring-4 ring-white"
+                    className="h-24 w-24 rounded-2xl object-cover shadow-md ring-4 ring-indigo-50"
                   />
-
                 ) : (
-
-                  <div className="flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-4xl font-black text-white shadow-lg shadow-indigo-500/30 ring-4 ring-white">
+                  <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-3xl font-black text-white shadow-lg shadow-indigo-500/20">
                     {getInitials(
                       displayUser.name
                     )}
                   </div>
-
                 )}
-
-                <h2 className="mt-5 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-                  {displayValue(
-                    displayUser.name
-                  )}
-                </h2>
-
-                <p className="mt-1 break-all text-sm font-medium text-slate-500">
-                  {displayValue(
-                    displayUser.email
-                  )}
-                </p>
-
-                <span className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-indigo-600">
-                  {displayValue(
-                    displayUser.role
-                  )}
-                </span>
 
               </div>
 
-              <div className="mt-8 space-y-3 border-t border-slate-100 pt-6">
+              {/* NAME */}
 
-                <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
+              <div className="min-w-0 flex-1">
 
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Account
+                <div className="flex flex-wrap items-center gap-3">
+
+                  <h2 className="break-words text-2xl font-black tracking-tight text-slate-900">
+                    {displayValue(
+                      displayUser.name
+                    )}
+                  </h2>
+
+                  <span className="rounded-full bg-indigo-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+                    Student
                   </span>
 
                   <span
-                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
+                    className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${
                       displayUser.active
-                        ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border border-rose-200 bg-rose-50 text-rose-700"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-rose-50 text-rose-700"
                     }`}
                   >
                     {displayUser.active
@@ -1058,225 +1009,303 @@ export default function Profile() {
 
                 </div>
 
-                <InfoRow
-                  label="Roll Number"
-                  value={
-                    displayUser.rollNumber ||
-                    displayUser.vtuNumber
-                  }
-                  mono
-                />
+                <p className="mt-2 break-all text-sm font-medium text-slate-500">
+                  {displayValue(
+                    displayUser.email
+                  )}
+                </p>
 
-                <InfoRow
-                  label="Mobile"
-                  value={
-                    displayUser.phoneNumber
-                  }
-                />
+                <div className="mt-4 flex flex-wrap gap-3">
+
+                  <span className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
+                    VTU:{" "}
+                    <span className="font-mono text-slate-900">
+                      {displayValue(
+                        displayUser.vtuNumber
+                      )}
+                    </span>
+                  </span>
+
+                  <span className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
+                    Roll No:{" "}
+                    <span className="font-mono text-slate-900">
+                      {displayValue(
+                        displayUser.rollNumber
+                      )}
+                    </span>
+                  </span>
+
+                  <span className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
+                    Semester:{" "}
+                    <span className="text-slate-900">
+                      {displayValue(
+                        displayUser.semester
+                      )}
+                    </span>
+                  </span>
+
+                </div>
 
               </div>
+
             </div>
 
-            {/* ================================================= */}
-            {/* ACADEMIC SUMMARY */}
-            {/* ================================================= */}
+          </div>
+        </div>
 
-            <div className="rounded-3xl border border-slate-200/60 bg-white p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:p-8">
+        {/* ================================================= */}
+        {/* MAIN CONTENT */}
+        {/* ================================================= */}
 
-              <h3 className="text-base font-bold text-slate-900">
-                Academic Summary
-              </h3>
+        <div className="space-y-6">
 
-              <div className="mt-5 space-y-3">
+          {/* ================================================= */}
+          {/* ACADEMIC OVERVIEW */}
+          {/* ================================================= */}
 
-                <InfoRow
-                  label="Degree"
-                  value={
-                    displayUser.degree
-                  }
-                />
+          <Section
+            title="Academic Details"
+            description="Your current academic and course registration information."
+          >
 
-                <InfoRow
-                  label="Branch"
-                  value={
-                    displayUser.branch
-                  }
-                />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 
-                <InfoRow
-                  label="Year"
-                  value={
-                    displayUser.year
-                  }
-                />
+              <InfoItem
+                label="Degree"
+                value={
+                  displayUser.degree
+                }
+              />
 
-                <InfoRow
-                  label="Semester"
-                  value={
-                    displayUser.semester
-                  }
-                />
+              <InfoItem
+                label="Branch"
+                value={
+                  displayUser.branch
+                }
+              />
 
-                <InfoRow
-                  label="Section"
-                  value={
-                    displayUser.section
-                  }
-                />
+              <InfoItem
+                label="Year"
+                value={
+                  displayUser.year
+                }
+              />
 
-                <InfoRow
-                  label="Batch"
-                  value={
-                    displayUser.batch
-                  }
-                />
+              <InfoItem
+                label="Semester"
+                value={
+                  displayUser.semester
+                }
+              />
+
+              <InfoItem
+                label="Section"
+                value={
+                  displayUser.section
+                }
+              />
+
+              <InfoItem
+                label="Batch"
+                value={
+                  displayUser.batch
+                }
+              />
+
+              <InfoItem
+                label="Regulation"
+                value={
+                  displayUser.regulation
+                }
+              />
+
+              <InfoItem
+                label="Roll Number"
+                value={
+                  displayUser.rollNumber
+                }
+                mono
+              />
+
+            </div>
+          </Section>
+
+          {/* ================================================= */}
+          {/* YOUR BUCKET */}
+          {/* ================================================= */}
+
+          <div className="rounded-3xl border border-indigo-100 bg-gradient-to-r from-indigo-50 via-white to-violet-50 p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:p-8">
+
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+
+              <div>
+
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">
+                  Academic Category
+                </p>
+
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">
+                  Your Bucket
+                </h2>
+
+                <p className="mt-1 text-sm font-medium text-slate-500">
+                  Your bucket/category as provided by AMS.
+                </p>
 
               </div>
+
+              <div className="rounded-2xl bg-white px-6 py-4 shadow-sm ring-1 ring-indigo-100">
+
+                <p className="text-center text-2xl font-black text-indigo-700">
+                  {displayValue(
+                    bucket
+                  )}
+                </p>
+
+              </div>
+
             </div>
           </div>
 
           {/* ================================================= */}
-          {/* RIGHT */}
+          {/* COURSE REGISTERED DETAILS */}
           {/* ================================================= */}
 
-          <div className="space-y-6 lg:col-span-2">
+          <Section
+            title="Course Registered Details"
+            description={`Courses currently registered in AMS • ${courses.length} ${
+              courses.length === 1
+                ? "course"
+                : "courses"
+            }`}
+          >
 
-            {/* ================================================= */}
-            {/* PERSONAL INFORMATION */}
-            {/* ================================================= */}
+            {courses.length > 0 ? (
 
-            <div className="overflow-hidden rounded-3xl border border-slate-200/60 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+              <div className="space-y-3">
 
-              <SectionHeader
-                title="Personal Information"
-                description="Student information maintained by the administration and AMS."
-                icon={
-                  <svg
-                    className="h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+                {courses.map(
+                  (
+                    course,
+                    index
+                  ) => (
+                    <CourseCard
+                      key={
+                        course.courseCode ||
+                        course.subjectCode ||
+                        `${index}-${course.courseName}`
+                      }
+                      course={
+                        course
+                      }
+                      index={
+                        index
+                      }
                     />
-                  </svg>
-                }
-              />
-
-              <div className="grid gap-3 p-6 sm:grid-cols-2 sm:p-8">
-
-                <InfoRow
-                  label="Student Name"
-                  value={
-                    displayUser.name
-                  }
-                />
-
-                <InfoRow
-                  label="Roll Number"
-                  value={
-                    displayUser.rollNumber ||
-                    displayUser.vtuNumber
-                  }
-                  mono
-                />
-
-                <InfoRow
-                  label="Gender"
-                  value={
-                    displayUser.gender
-                  }
-                />
-
-                <InfoRow
-                  label="Father Name"
-                  value={
-                    displayUser.fatherName
-                  }
-                />
-
-                <InfoRow
-                  label="Mother Name"
-                  value={
-                    displayUser.motherName
-                  }
-                />
-
-                <InfoRow
-                  label="Date of Birth"
-                  value={
-                    displayUser.dateOfBirth
-                      ? formatDate(
-                          displayUser.dateOfBirth
-                        )
-                      : "—"
-                  }
-                />
-
-                <InfoRow
-                  label="Degree"
-                  value={
-                    displayUser.degree
-                  }
-                />
-
-                <InfoRow
-                  label="Nationality"
-                  value={
-                    displayUser.nationality
-                  }
-                />
-
-                <InfoRow
-                  label="Community"
-                  value={
-                    displayUser.community
-                  }
-                />
-
-                <InfoRow
-                  label="Religion"
-                  value={
-                    displayUser.religion
-                  }
-                />
+                  )
+                )}
 
               </div>
-            </div>
 
-            {/* ================================================= */}
-            {/* CONTACT */}
-            {/* ================================================= */}
+            ) : (
 
-            <div className="overflow-hidden rounded-3xl border border-slate-200/60 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
 
-              <SectionHeader
-                title="Contact & Identification"
-                description="Registered contact and academic identification details."
-                icon={
-                  <svg
-                    className="h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106a1.125 1.125 0 00-1.173.417l-.97 1.293a.75.75 0 01-.941.218 12.035 12.035 0 01-5.735-5.735.75.75 0 01.218-.941l1.293-.97c.372-.279.542-.76.417-1.173L9.422 5.662A1.125 1.125 0 008.33 4.81H6.75A2.25 2.25 0 004.5 7.06v-.31z"
-                    />
-                  </svg>
+                <p className="text-sm font-bold text-slate-700">
+                  No registered courses found.
+                </p>
+
+                <p className="mt-1 text-xs font-medium text-slate-500">
+                  Please synchronize your AMS information.
+                </p>
+
+              </div>
+
+            )}
+
+          </Section>
+
+          {/* ================================================= */}
+          {/* PERSONAL INFORMATION */}
+          {/* ================================================= */}
+
+          <Section
+            title="Personal Information"
+            description="Personal information available in your student profile."
+          >
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+
+              <InfoItem
+                label="Full Name"
+                value={
+                  displayUser.name
                 }
               />
 
-              <div className="grid gap-3 p-6 sm:grid-cols-2 sm:p-8">
+              <InfoItem
+                label="Gender"
+                value={
+                  displayUser.gender
+                }
+              />
 
-                <InfoRow
+              <InfoItem
+                label="Date of Birth"
+                value={
+                  displayUser.dateOfBirth
+                    ? formatDate(
+                        displayUser.dateOfBirth
+                      )
+                    : ""
+                }
+              />
+
+              <InfoItem
+                label="Nationality"
+                value={
+                  displayUser.nationality
+                }
+              />
+
+              <InfoItem
+                label="Community"
+                value={
+                  displayUser.community
+                }
+              />
+
+              <InfoItem
+                label="Religion"
+                value={
+                  displayUser.religion
+                }
+              />
+
+            </div>
+          </Section>
+
+          {/* ================================================= */}
+          {/* CONTACT + PARENT */}
+          {/* ================================================= */}
+
+          <div className="grid gap-6 lg:grid-cols-2">
+
+            <Section
+              title="Contact Details"
+              description="Your registered contact information."
+            >
+
+              <div className="grid gap-3">
+
+                <InfoItem
+                  label="Email"
+                  value={
+                    displayUser.email
+                  }
+                />
+
+                <InfoItem
                   label="Mobile Number"
                   value={
                     displayUser.phoneNumber
@@ -1284,14 +1313,7 @@ export default function Profile() {
                   mono
                 />
 
-                <InfoRow
-                  label="Email"
-                  value={
-                    displayUser.email
-                  }
-                />
-
-                <InfoRow
+                <InfoItem
                   label="VTU Number"
                   value={
                     displayUser.vtuNumber
@@ -1299,172 +1321,121 @@ export default function Profile() {
                   mono
                 />
 
-                <InfoRow
-                  label="Academic Bank Credits ID"
-                  value={
-                    displayUser.academicBankCreditsId
-                  }
-                  mono
-                />
-
-                <InfoRow
-                  label="Aadhaar Number"
-                  value={
-                    displayUser.aadhaarNumber
-                  }
-                  mono
-                />
-
               </div>
-            </div>
 
-            {/* ================================================= */}
-            {/* PARENT INFORMATION */}
-            {/* ================================================= */}
+            </Section>
 
-            <div className="overflow-hidden rounded-3xl border border-slate-200/60 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+            <Section
+              title="Parent Information"
+              description="Parent and guardian contact details."
+            >
 
-              <SectionHeader
-                title="Parent Information"
-                description="Parent and guardian information."
-                icon={
-                  <svg
-                    className="h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766"
-                    />
-                  </svg>
-                }
-              />
+              <div className="grid gap-3">
 
-              <div className="grid gap-3 p-6 sm:grid-cols-2 sm:p-8">
-
-                <InfoRow
+                <InfoItem
                   label="Father Name"
                   value={
                     displayUser.fatherName
                   }
                 />
 
-                <InfoRow
+                <InfoItem
                   label="Mother Name"
                   value={
                     displayUser.motherName
                   }
                 />
 
-                <InfoRow
+                <InfoItem
                   label="Parent / Guardian"
                   value={
                     displayUser.parentName
                   }
                 />
 
-                <InfoRow
+                <InfoItem
                   label="Parent Phone"
                   value={
                     displayUser.parentPhone
                   }
+                  mono
                 />
 
               </div>
-            </div>
 
-            {/* ================================================= */}
-            {/* ACADEMIC */}
-            {/* ================================================= */}
+            </Section>
 
-            <div className="overflow-hidden rounded-3xl border border-slate-200/60 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+          </div>
 
-              <SectionHeader
-                title="Academic Details"
-                description="Current academic information."
-                icon={
-                  <svg
-                    className="h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M4.26 10.147a60.438 60.438 0 00-.491 6.347A48.62 48.62 0 0112 20.904a48.62 48.62 0 018.23-4.41 60.438 60.438 0 00-.491-6.347m-15.48 0a50.248 50.248 0 0115.48 0m-15.48 0a50.25 50.25 0 00-2.93 1.083A48.25 48.25 0 0112 20.904a48.25 48.25 0 018.23-9.674 50.25 50.25 0 00-2.93-1.083m-15.48 0A50.25 50.25 0 0112 3.75a50.25 50.25 0 019.74 1.397m-19.48 0A50.25 50.25 0 0112 3.75"
-                    />
-                  </svg>
+          {/* ================================================= */}
+          {/* IDENTIFICATION */}
+          {/* ================================================= */}
+
+          <Section
+            title="Identification Details"
+            description="Academic and identification information."
+          >
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+
+              <InfoItem
+                label="Student ID"
+                value={
+                  displayUser.studentId
                 }
+                mono
               />
 
-              <div className="grid gap-3 p-6 sm:grid-cols-2 sm:p-8">
+              <InfoItem
+                label="VTU Number"
+                value={
+                  displayUser.vtuNumber
+                }
+                mono
+              />
 
-                <InfoRow
-                  label="Degree"
-                  value={
-                    displayUser.degree
-                  }
-                />
+              <InfoItem
+                label="Roll Number"
+                value={
+                  displayUser.rollNumber
+                }
+                mono
+              />
 
-                <InfoRow
-                  label="Branch"
-                  value={
-                    displayUser.branch
-                  }
-                />
+              <InfoItem
+                label="Academic Bank Credits ID"
+                value={
+                  displayUser.academicBankCreditsId
+                }
+                mono
+              />
 
-                <InfoRow
-                  label="Year"
-                  value={
-                    displayUser.year
-                  }
-                />
+              <InfoItem
+                label="Aadhaar Number"
+                value={
+                  displayUser.aadhaarNumber
+                }
+                mono
+              />
 
-                <InfoRow
-                  label="Semester"
-                  value={
-                    displayUser.semester
-                  }
-                />
-
-                <InfoRow
-                  label="Section"
-                  value={
-                    displayUser.section
-                  }
-                />
-
-                <InfoRow
-                  label="Batch"
-                  value={
-                    displayUser.batch
-                  }
-                />
-
-              </div>
             </div>
+          </Section>
 
-            {/* ================================================= */}
-            {/* ACCOUNT STATUS */}
-            {/* ================================================= */}
+          {/* ================================================= */}
+          {/* ACCOUNT + AMS */}
+          {/* ================================================= */}
 
-            <div className="overflow-hidden rounded-3xl border border-slate-200/60 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+          <div className="grid gap-6 lg:grid-cols-2">
 
-              <SectionHeader
-                title="Account Status"
-                description="Your UniEve AI account status."
-              />
+            <Section
+              title="Account Status"
+              description="Your UniEve AI account information."
+            >
 
-              <div className="grid gap-3 p-6 sm:grid-cols-2 sm:p-8">
+              <div className="grid gap-3">
 
-                <InfoRow
-                  label="Account"
+                <InfoItem
+                  label="Account Status"
                   value={
                     displayUser.active
                       ? "Active"
@@ -1472,14 +1443,14 @@ export default function Profile() {
                   }
                 />
 
-                <InfoRow
+                <InfoItem
                   label="Role"
                   value={
                     displayUser.role
                   }
                 />
 
-                <InfoRow
+                <InfoItem
                   label="Password Change"
                   value={
                     displayUser.forcePasswordChange
@@ -1488,7 +1459,7 @@ export default function Profile() {
                   }
                 />
 
-                <InfoRow
+                <InfoItem
                   label="Portal Credentials"
                   value={
                     displayUser.portalCredentialsConfigured
@@ -1498,210 +1469,167 @@ export default function Profile() {
                 />
 
               </div>
-            </div>
 
-            {/* ================================================= */}
-            {/* AMS SYNC */}
-            {/* ================================================= */}
+            </Section>
 
-            <div className="overflow-hidden rounded-3xl border border-slate-200/60 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+            <Section
+              title="Veltech AMS"
+              description="College portal synchronization information."
+            >
 
-              <SectionHeader
-                title="Veltech AMS Sync"
-                description="College portal synchronization status."
-              />
+              <div className="grid gap-3">
 
-              <div className="p-6 sm:p-8">
+                <InfoItem
+                  label="AMS Username"
+                  value={
+                    displayUser.portalUsername ||
+                    displayUser.vtuNumber
+                  }
+                  mono
+                />
 
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <InfoItem
+                  label="Sync Status"
+                  value={
+                    displayUser.portalSynced
+                      ? "Synchronized"
+                      : "Available"
+                  }
+                />
 
-                  <div>
+                <InfoItem
+                  label="Last Synced"
+                  value={
+                    displayUser.lastSyncedAt
+                      ? formatDateTime(
+                          displayUser.lastSyncedAt
+                        )
+                      : "Current session"
+                  }
+                />
 
-                    <p className="text-sm font-bold text-slate-900">
-                      AMS Profile Status
-                    </p>
-
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      Student details are fetched from AMS
-                      when synchronization is successful.
-                    </p>
-
-                  </div>
-
-                  <span
-                    className={`w-fit rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider ${
-                      displayUser.portalSynced
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-amber-50 text-amber-700"
-                    }`}
-                  >
-                    {displayUser.portalSynced
-                      ? "Synced"
-                      : "Not Synced"}
-                  </span>
-
-                </div>
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-
-                  <div className="rounded-2xl bg-slate-50 p-4">
-
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Last Synced
-                    </p>
-
-                    <p className="mt-2 text-sm font-bold text-slate-700">
-                      {displayUser.lastSyncedAt
-                        ? formatDateTime(
-                            displayUser.lastSyncedAt
-                          )
-                        : "Never"}
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-2xl bg-slate-50 p-4">
-
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      AMS Username
-                    </p>
-
-                    <p className="mt-2 break-all text-sm font-mono font-bold text-slate-700">
-                      {displayValue(
-                        displayUser.portalUsername
-                      )}
-                    </p>
-
-                  </div>
-
-                </div>
               </div>
-            </div>
 
-            {/* ================================================= */}
-            {/* NOTIFICATIONS */}
-            {/* ================================================= */}
-
-            <div className="overflow-hidden rounded-3xl border border-slate-200/60 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-
-              <SectionHeader
-                title="Notification Preferences"
-                description="Choose how UniEve AI should notify you."
-              />
-
-              <form
-                onSubmit={
-                  handleSubmit
-                }
-                className="space-y-5 p-6 sm:p-8"
-              >
-
-                {/* SMS */}
-
-                <label className="flex cursor-pointer items-center justify-between gap-5 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-5">
-
-                  <div>
-
-                    <p className="text-sm font-bold text-slate-900">
-                      SMS Alerts
-                    </p>
-
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      Receive attendance alerts through SMS.
-                    </p>
-
-                  </div>
-
-                  <div className="relative h-6 w-11 shrink-0">
-
-                    <input
-                      type="checkbox"
-                      name="smsEnabled"
-                      checked={Boolean(
-                        form.smsEnabled
-                      )}
-                      onChange={
-                        handleChange
-                      }
-                      className="peer sr-only"
-                    />
-
-                    <div className="absolute inset-0 rounded-full bg-slate-300 transition peer-checked:bg-indigo-600" />
-
-                    <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5" />
-
-                  </div>
-
-                </label>
-
-                {/* APP */}
-
-                <label className="flex cursor-pointer items-center justify-between gap-5 rounded-2xl border border-violet-100 bg-violet-50/50 p-5">
-
-                  <div>
-
-                    <p className="text-sm font-bold text-slate-900">
-                      Application Notifications
-                    </p>
-
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      Receive attendance warnings and system updates.
-                    </p>
-
-                  </div>
-
-                  <div className="relative h-6 w-11 shrink-0">
-
-                    <input
-                      type="checkbox"
-                      name="notificationsEnabled"
-                      checked={Boolean(
-                        form.notificationsEnabled
-                      )}
-                      onChange={
-                        handleChange
-                      }
-                      className="peer sr-only"
-                    />
-
-                    <div className="absolute inset-0 rounded-full bg-slate-300 transition peer-checked:bg-violet-600" />
-
-                    <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5" />
-
-                  </div>
-
-                </label>
-
-                {/* SAVE */}
-
-                <div className="flex justify-end">
-
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                  >
-                    {saving
-                      ? "Saving..."
-                      : "Save Preferences"}
-                  </button>
-
-                </div>
-
-              </form>
-            </div>
-
-            {/* ================================================= */}
-            {/* VELTECH AMS - BOTTOM */}
-            {/* ================================================= */}
-
-            <div className="pt-2">
-
-              <PortalCredentialsCard />
-
-            </div>
+            </Section>
 
           </div>
+
+          {/* ================================================= */}
+          {/* NOTIFICATION SETTINGS */}
+          {/* ================================================= */}
+
+          <Section
+            title="Notification Preferences"
+            description="Choose how UniEve AI should notify you."
+          >
+
+            <form
+              onSubmit={
+                handleSubmit
+              }
+              className="space-y-4"
+            >
+
+              {/* SMS */}
+
+              <label className="flex cursor-pointer items-center justify-between gap-5 rounded-2xl border border-slate-100 bg-slate-50/70 p-5 transition hover:border-indigo-100 hover:bg-indigo-50/30">
+
+                <div>
+
+                  <p className="text-sm font-bold text-slate-900">
+                    SMS Alerts
+                  </p>
+
+                  <p className="mt-1 text-xs font-medium text-slate-500">
+                    Receive important attendance alerts through SMS.
+                  </p>
+
+                </div>
+
+                <div className="relative h-6 w-11 shrink-0">
+
+                  <input
+                    type="checkbox"
+                    name="smsEnabled"
+                    checked={Boolean(
+                      form.smsEnabled
+                    )}
+                    onChange={
+                      handleChange
+                    }
+                    className="peer sr-only"
+                  />
+
+                  <div className="absolute inset-0 rounded-full bg-slate-300 transition peer-checked:bg-indigo-600" />
+
+                  <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5" />
+
+                </div>
+
+              </label>
+
+              {/* APP NOTIFICATIONS */}
+
+              <label className="flex cursor-pointer items-center justify-between gap-5 rounded-2xl border border-slate-100 bg-slate-50/70 p-5 transition hover:border-violet-100 hover:bg-violet-50/30">
+
+                <div>
+
+                  <p className="text-sm font-bold text-slate-900">
+                    Application Notifications
+                  </p>
+
+                  <p className="mt-1 text-xs font-medium text-slate-500">
+                    Receive attendance warnings and system updates.
+                  </p>
+
+                </div>
+
+                <div className="relative h-6 w-11 shrink-0">
+
+                  <input
+                    type="checkbox"
+                    name="notificationsEnabled"
+                    checked={Boolean(
+                      form.notificationsEnabled
+                    )}
+                    onChange={
+                      handleChange
+                    }
+                    className="peer sr-only"
+                  />
+
+                  <div className="absolute inset-0 rounded-full bg-slate-300 transition peer-checked:bg-violet-600" />
+
+                  <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5" />
+
+                </div>
+
+              </label>
+
+              <div className="flex justify-end pt-2">
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  {saving
+                    ? "Saving..."
+                    : "Save Preferences"}
+                </button>
+
+              </div>
+
+            </form>
+
+          </Section>
+
+          {/* ================================================= */}
+          {/* AMS CREDENTIALS */}
+          {/* ================================================= */}
+
+          <PortalCredentialsCard />
+
         </div>
       </div>
     </div>

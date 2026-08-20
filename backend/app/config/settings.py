@@ -2,7 +2,10 @@ from functools import lru_cache
 from typing import List
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    SettingsConfigDict,
+)
 
 
 class Settings(BaseSettings):
@@ -20,9 +23,13 @@ class Settings(BaseSettings):
     # DATABASE
     # =====================================================
 
-    mongo_uri: str = "mongodb://localhost:27017"
+    mongo_uri: str = (
+        "mongodb://localhost:27017"
+    )
 
-    mongo_db_name: str = "smart_attendance"
+    mongo_db_name: str = (
+        "smart_attendance"
+    )
 
     # =====================================================
     # JWT AUTHENTICATION
@@ -34,7 +41,31 @@ class Settings(BaseSettings):
 
     jwt_algorithm: str = "HS256"
 
-    access_token_expire_minutes: int = 1440
+    # -----------------------------------------------------
+    # LOGIN SESSION
+    # -----------------------------------------------------
+    #
+    # 43,200 minutes = 30 days
+    #
+    # This works with the existing frontend architecture:
+    #
+    # Login
+    #   ↓
+    # JWT
+    #   ↓
+    # localStorage
+    #   ↓
+    # Browser reopened
+    #   ↓
+    # JWT still valid
+    #   ↓
+    # User remains logged in
+    #
+    # Logout still removes the token immediately.
+    #
+    # -----------------------------------------------------
+
+    access_token_expire_minutes: int = 43200
 
     # =====================================================
     # CORS
@@ -68,15 +99,10 @@ class Settings(BaseSettings):
     # =====================================================
     # ADAPTER MODE
     # =====================================================
-    #
+
     # mock   = development/testing
     # portal = actual Vel Tech portal
-    #
-    # IMPORTANT:
-    # This must match the .env value:
-    #
-    # COLLEGE_ADAPTER_MODE=portal
-    #
+
     college_adapter_mode: str = "mock"
 
     # =====================================================
@@ -117,9 +143,13 @@ class Settings(BaseSettings):
     # ADMIN
     # =====================================================
 
-    default_admin_email: str = "admin@example.com"
+    default_admin_email: str = (
+        "admin@example.com"
+    )
 
-    default_admin_password: str = "Admin@12345"
+    default_admin_password: str = (
+        "Admin@12345"
+    )
 
     default_admin_name: str = "Admin"
 
@@ -165,6 +195,8 @@ class Settings(BaseSettings):
 
     admin_can_reset_passwords: bool = True
 
+    force_password_change_after_admin_reset: bool = True
+
     # =====================================================
     # SYNCHRONIZATION
     # =====================================================
@@ -186,8 +218,6 @@ class Settings(BaseSettings):
     # =====================================================
 
     expose_passwords: bool = False
-
-    force_password_change_after_admin_reset: bool = True
 
     # =====================================================
     # COLLEGE PORTAL CREDENTIAL ENCRYPTION

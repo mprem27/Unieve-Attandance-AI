@@ -715,11 +715,67 @@ export default function Profile() {
           );
         }
 
+        // -------------------------------------------------
+        // AMS RESPONSE NORMALIZATION
+        // -------------------------------------------------
+        // Keep the existing API/service untouched.
+        // Some backend responses may wrap the actual
+        // academic data inside "data".
+        // This only makes Profile consume both shapes.
+        // -------------------------------------------------
+
+        const academicRoot =
+          academicDetails?.data &&
+          typeof academicDetails.data ===
+            "object" &&
+          !Array.isArray(
+            academicDetails.data
+          )
+            ? {
+                ...academicDetails,
+                ...academicDetails.data,
+              }
+            : academicDetails || {};
+
+        const academicProfile =
+          academicRoot?.profile &&
+          typeof academicRoot.profile ===
+            "object"
+            ? academicRoot.profile
+            : {};
+
+        const academicCourses =
+          Array.isArray(
+            academicRoot?.courses
+          )
+            ? academicRoot.courses
+            : Array.isArray(
+                academicRoot?.registeredCourses
+              )
+              ? academicRoot.registeredCourses
+              : Array.isArray(
+                  academicRoot?.registeredSubjects
+                )
+                ? academicRoot.registeredSubjects
+                : [];
+
+        const academicBucket =
+          firstValue(
+            academicRoot?.bucket,
+            academicRoot?.yourBucket,
+            academicRoot?.your_bucket,
+            academicProfile?.bucket,
+            academicProfile?.yourBucket,
+            academicProfile?.your_bucket
+          );
+
         const profileData =
           normalizeProfile(
-            rawProfile,
-            academicDetails?.profile ||
-              {}
+            {
+              ...rawProfile,
+              ...academicRoot,
+            },
+            academicProfile
           );
 
         setProfile(
@@ -727,15 +783,11 @@ export default function Profile() {
         );
 
         setBucket(
-          academicDetails?.bucket || ""
+          academicBucket
         );
 
         setCourses(
-          Array.isArray(
-            academicDetails?.courses
-          )
-            ? academicDetails.courses
-            : []
+          academicCourses
         );
 
         setForm({

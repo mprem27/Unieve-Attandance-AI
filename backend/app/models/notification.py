@@ -4,9 +4,17 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict
 
 
+# =========================================================
+# MONGODB COLLECTIONS
+# =========================================================
+
 NOTIFICATIONS = "notifications"
 SMS_LOGS = "sms_logs"
 
+
+# =========================================================
+# NOTIFICATION TYPES
+# =========================================================
 
 NotificationType = Literal[
     "ATTENDANCE_ABSENT",
@@ -16,6 +24,10 @@ NotificationType = Literal[
     "SYNC_UPDATE",
 ]
 
+
+# =========================================================
+# SMS STATUS
+# =========================================================
 
 SMSStatus = Literal[
     "NOT_REQUIRED",
@@ -29,6 +41,10 @@ SMSStatus = Literal[
 ]
 
 
+# =========================================================
+# NOTIFICATION PRIORITY
+# =========================================================
+
 NotificationPriority = Literal[
     "LOW",
     "NORMAL",
@@ -37,35 +53,60 @@ NotificationPriority = Literal[
 ]
 
 
+# =========================================================
+# NOTIFICATION DOCUMENT
+# =========================================================
+
 class NotificationDocument(BaseModel):
+    """
+    MongoDB notification document.
+
+    This model is used for student in-app notifications
+    and also stores the SMS delivery status associated
+    with the notification.
+
+    Attendance data itself is NOT stored here.
+    """
+
     model_config = ConfigDict(
         populate_by_name=True
     )
 
+    # =====================================================
+    # IDENTIFIER
+    # =====================================================
+
     id: Optional[str] = None
 
-    # =========================================================
+    # =====================================================
     # STUDENT
-    # =========================================================
+    # =====================================================
 
     studentId: str
 
-    # =========================================================
+    # =====================================================
     # SUBJECT
-    # =========================================================
+    # =====================================================
 
     subjectId: Optional[str] = None
+
     subjectName: Optional[str] = None
 
-    # =========================================================
-    # ATTENDANCE DATE
-    # =========================================================
+    subjectCode: Optional[str] = None
+
+    # =====================================================
+    # ATTENDANCE
+    # =====================================================
 
     date: Optional[str] = None
 
-    # =========================================================
+    attendanceStatus: Optional[str] = None
+
+    attendancePercentage: Optional[float] = None
+
+    # =====================================================
     # NOTIFICATION
-    # =========================================================
+    # =====================================================
 
     type: NotificationType
 
@@ -77,23 +118,35 @@ class NotificationDocument(BaseModel):
 
     read: bool = False
 
-    # =========================================================
+    # =====================================================
     # SMS
-    # =========================================================
+    # =====================================================
 
     smsStatus: SMSStatus = "NOT_REQUIRED"
 
     smsMessageId: Optional[str] = None
 
-    # =========================================================
+    smsPhone: Optional[str] = None
+
+    smsError: Optional[str] = None
+
+    smsSentAt: Optional[datetime] = None
+
+    # =====================================================
+    # DUPLICATE PROTECTION
+    # =====================================================
+
+    eventKey: Optional[str] = None
+
+    # =====================================================
     # SOURCE
-    # =========================================================
+    # =====================================================
 
     source: str = "system"
 
-    # =========================================================
+    # =====================================================
     # TIMESTAMPS
-    # =========================================================
+    # =====================================================
 
     createdAt: datetime
 

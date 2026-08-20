@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.database import mongo
 from app.config.settings import settings
+
 from app.routes import (
     admin,
     attendance,
@@ -14,68 +16,106 @@ from app.routes import (
     subjects,
     timetable,
 )
+
 from app.scheduler.scheduler import (
     start_scheduler,
     stop_scheduler,
 )
+
 from app.services.auth_service import AuthService
 from app.utils.logger import setup_logging
 
 
+# =========================================================
+# LOGGER
+# =========================================================
+
+logger = logging.getLogger(__name__)
+
+
+# =========================================================
+# APPLICATION LIFESPAN
+# =========================================================
+
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(
+    app: FastAPI,
+):
     """
     Application startup and shutdown lifecycle.
+
+    Existing application behavior is preserved:
+    - MongoDB connection
+    - Default admin initialization
+    - Background scheduler
+    - MongoDB disconnection
     """
 
     setup_logging()
 
-    # -----------------------------------------------------
+    # =====================================================
     # DATABASE
-    # -----------------------------------------------------
+    # =====================================================
+
     mongo.connect()
 
     db = mongo.get_db()
 
-    # -----------------------------------------------------
+    # =====================================================
     # DEFAULT ADMIN
-    # -----------------------------------------------------
-    AuthService(db).ensure_default_admin(
+    # =====================================================
+
+    AuthService(
+        db
+    ).ensure_default_admin(
         settings.default_admin_email,
         settings.default_admin_password,
         settings.default_admin_name,
     )
 
-    # -----------------------------------------------------
+    # =====================================================
     # BACKGROUND SCHEDULER
-    # -----------------------------------------------------
+    # =====================================================
+
     try:
         start_scheduler(db)
-    except Exception as exc:
-        # Scheduler failure must not stop the API server.
-        import logging
 
-        logging.getLogger(__name__).exception(
+    except Exception as exc:
+        # Scheduler failure must not stop
+        # the API server.
+        logger.exception(
             "Failed to start scheduler: %s",
             exc,
         )
 
+    # =====================================================
+    # APPLICATION RUNNING
+    # =====================================================
+
     yield
 
-    # -----------------------------------------------------
+    # =====================================================
     # SHUTDOWN
-    # -----------------------------------------------------
+    # =====================================================
+
     try:
         stop_scheduler()
-    except Exception:
-        import logging
 
-        logging.getLogger(__name__).exception(
-            "Failed to stop scheduler",
+    except Exception:
+        logger.exception(
+            "Failed to stop scheduler."
         )
+
+    # =====================================================
+    # DATABASE DISCONNECT
+    # =====================================================
 
     mongo.disconnect()
 
+
+# =========================================================
+# FASTAPI APPLICATION
+# =========================================================
 
 app = FastAPI(
     title=settings.app_name,
@@ -98,15 +138,15 @@ app.add_middleware(
 
 
 # =========================================================
-# API ROUTES
+# API PREFIX
 # =========================================================
 
 API_PREFIX = settings.api_v1_prefix
 
 
-# ---------------------------------------------------------
-# AUTH
-# ---------------------------------------------------------
+# =========================================================
+# AUTH ROUTES
+# =========================================================
 
 app.include_router(
     auth.router,
@@ -114,9 +154,9 @@ app.include_router(
 )
 
 
-# ---------------------------------------------------------
-# PROFILE
-# ---------------------------------------------------------
+# =========================================================
+# PROFILE ROUTES
+# =========================================================
 
 app.include_router(
     profile.router,
@@ -124,13 +164,15 @@ app.include_router(
 )
 
 
-# ---------------------------------------------------------
-# ATTENDANCE
-# ---------------------------------------------------------
+# =========================================================
+# ATTENDANCE ROUTES
+# =========================================================
 #
 # EXISTING WORKING ATTENDANCE CODE.
-# DO NOT MODIFY FOR TIMETABLE.
 #
+# No attendance logic is modified here.
+#
+# =========================================================
 
 app.include_router(
     attendance.router,
@@ -138,9 +180,9 @@ app.include_router(
 )
 
 
-# ---------------------------------------------------------
-# SUBJECTS
-# ---------------------------------------------------------
+# =========================================================
+# SUBJECT ROUTES
+# =========================================================
 
 app.include_router(
     subjects.router,
@@ -148,14 +190,13 @@ app.include_router(
 )
 
 
-# ---------------------------------------------------------
-# TIMETABLE
-# ---------------------------------------------------------
+# =========================================================
+# TIMETABLE ROUTES
+# =========================================================
 #
-# NEW TIMETABLE ROUTER.
-# This only exposes timetable data.
-# It does NOT replace the attendance router.
+# Timetable remains independent from attendance.
 #
+# =========================================================
 
 app.include_router(
     timetable.router,
@@ -163,9 +204,21 @@ app.include_router(
 )
 
 
-# ---------------------------------------------------------
-# NOTIFICATIONS
-# ---------------------------------------------------------
+# =========================================================
+# NOTIFICATION ROUTES
+# =========================================================
+#
+# In-app notification endpoints.
+#
+# Final URLs:
+#
+# GET   /api/v1/notifications
+# GET   /api/v1/notifications/unread-count
+# PATCH /api/v1/notifications/{id}/read
+# PATCH /api/v1/notifications/read-all
+# DELETE /api/v1/notifications/{id}
+#
+# =========================================================
 
 app.include_router(
     notifications.router,
@@ -177,13 +230,13 @@ app.include_router(
 # ADMIN ROUTES
 # =========================================================
 #
-# The admin router already contains its /admin prefix.
+# The admin router already contains its own /admin
+# prefix.
 #
 # Final URLs:
 #
 # /api/v1/admin/...
 #
-# No admin logic is changed here.
 # =========================================================
 
 app.include_router(
@@ -203,7 +256,13 @@ def health():
     }
 
 
-@app.get(f"{API_PREFIX}/health")
+# =========================================================
+# API HEALTH CHECK
+# =========================================================
+
+@app.get(
+    f"{API_PREFIX}/health"
+)
 def api_health():
     return {
         "status": "ok",

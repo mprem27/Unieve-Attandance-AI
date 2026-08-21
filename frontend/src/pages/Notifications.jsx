@@ -1,4 +1,9 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+
 import api from "../services/api";
 
 import NotificationCard from "../components/NotificationCard";
@@ -10,11 +15,20 @@ export default function Notifications() {
   // STATE
   // =====================================================
 
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState("");
-  const [markingRead, setMarkingRead] = useState(null);
+  const [notifications, setNotifications] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [isRefreshing, setIsRefreshing] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const [markingRead, setMarkingRead] =
+    useState(null);
 
   // =====================================================
   // LOAD NOTIFICATIONS
@@ -22,6 +36,11 @@ export default function Notifications() {
 
   const loadNotifications = useCallback(
     async (manualRefresh = false) => {
+      // Prevent multiple refresh requests
+      if (manualRefresh && isRefreshing) {
+        return;
+      }
+
       try {
         if (manualRefresh) {
           setIsRefreshing(true);
@@ -31,9 +50,13 @@ export default function Notifications() {
 
         setError("");
 
-        const response = await api.get("/notifications");
+        const response = await api.get(
+          "/notifications"
+        );
 
-        const data = Array.isArray(response.data)
+        const data = Array.isArray(
+          response.data
+        )
           ? response.data
           : [];
 
@@ -44,22 +67,23 @@ export default function Notifications() {
           err
         );
 
-        setError(
+        const message =
           err?.response?.data?.detail ||
-            err?.response?.data?.message ||
-            "Unable to load notifications. Please try again."
-        );
+          err?.response?.data?.message ||
+          "Unable to load notifications. Please try again.";
+
+        setError(message);
       } finally {
         if (manualRefresh) {
-          setTimeout(() => {
-            setIsRefreshing(false);
-          }, 400);
+          // Small visual feedback without
+          // unnecessarily keeping the page loading.
+          setIsRefreshing(false);
         } else {
           setLoading(false);
         }
       }
     },
-    []
+    [isRefreshing]
   );
 
   // =====================================================
@@ -67,14 +91,67 @@ export default function Notifications() {
   // =====================================================
 
   useEffect(() => {
-    loadNotifications();
-  }, [loadNotifications]);
+    let mounted = true;
+
+    const loadInitialNotifications =
+      async () => {
+        try {
+          setLoading(true);
+          setError("");
+
+          const response =
+            await api.get(
+              "/notifications"
+            );
+
+          if (!mounted) {
+            return;
+          }
+
+          const data =
+            Array.isArray(
+              response.data
+            )
+              ? response.data
+              : [];
+
+          setNotifications(data);
+        } catch (err) {
+          if (!mounted) {
+            return;
+          }
+
+          console.error(
+            "Failed to load notifications:",
+            err
+          );
+
+          setError(
+            err?.response?.data?.detail ||
+              err?.response?.data?.message ||
+              "Unable to load notifications. Please try again."
+          );
+        } finally {
+          if (mounted) {
+            setLoading(false);
+          }
+        }
+      };
+
+    loadInitialNotifications();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // =====================================================
   // GET NOTIFICATION ID
   // =====================================================
 
-  const getNotificationId = (notification) => {
+  const getNotificationId = (
+    notification
+  ) => {
     return (
       notification?.id ||
       notification?._id ||
@@ -83,10 +160,40 @@ export default function Notifications() {
   };
 
   // =====================================================
+  // GET STABLE NOTIFICATION KEY
+  // =====================================================
+
+  const getNotificationKey = (
+    notification,
+    index
+  ) => {
+    const id =
+      getNotificationId(
+        notification
+      );
+
+    if (id) {
+      return String(id);
+    }
+
+    // Stable fallback instead of Math.random().
+    return [
+      notification?.eventKey,
+      notification?.type,
+      notification?.date,
+      index,
+    ]
+      .filter(Boolean)
+      .join("-");
+  };
+
+  // =====================================================
   // MARK AS READ
   // =====================================================
 
-  const handleMarkRead = async (notificationId) => {
+  const handleMarkRead = async (
+    notificationId
+  ) => {
     if (!notificationId) {
       console.error(
         "Notification ID is missing."
@@ -99,33 +206,46 @@ export default function Notifications() {
       return;
     }
 
-    if (markingRead === notificationId) {
+    if (
+      markingRead === notificationId
+    ) {
       return;
     }
 
     try {
-      setMarkingRead(notificationId);
+      setMarkingRead(
+        notificationId
+      );
+
       setError("");
 
       await api.patch(
         `/notifications/${notificationId}/read`
       );
 
-      setNotifications((current) =>
-        current.map((notification) => {
-          const currentId =
-            getNotificationId(notification);
+      setNotifications(
+        (current) =>
+          current.map(
+            (notification) => {
+              const currentId =
+                getNotificationId(
+                  notification
+                );
 
-          if (currentId === notificationId) {
-            return {
-              ...notification,
-              read: true,
-              isRead: true,
-            };
-          }
+              if (
+                currentId ===
+                notificationId
+              ) {
+                return {
+                  ...notification,
+                  read: true,
+                  isRead: true,
+                };
+              }
 
-          return notification;
-        })
+              return notification;
+            }
+          )
       );
     } catch (err) {
       console.error(
@@ -148,23 +268,33 @@ export default function Notifications() {
   // =====================================================
 
   const handleRefresh = () => {
-    if (!isRefreshing) {
-      loadNotifications(true);
+    if (
+      isRefreshing ||
+      loading
+    ) {
+      return;
     }
+
+    loadNotifications(true);
   };
 
   // =====================================================
   // COUNTS
   // =====================================================
 
-  const unreadCount = notifications.filter(
-    (notification) =>
-      notification.read !== true &&
-      notification.isRead !== true
-  ).length;
+  const unreadCount =
+    notifications.filter(
+      (notification) =>
+        notification.read !== true &&
+        notification.isRead !== true
+    ).length;
 
   const readCount =
-    notifications.length - unreadCount;
+    Math.max(
+      notifications.length -
+        unreadCount,
+      0
+    );
 
   // =====================================================
   // LOADING
@@ -205,9 +335,9 @@ export default function Notifications() {
 
       <div className="mx-auto max-w-[1600px]">
 
-        {/* ================================================= */}
-        {/* HEADER */}
-        {/* ================================================= */}
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
         <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
 
@@ -249,12 +379,17 @@ export default function Notifications() {
 
           </div>
 
-          {/* Refresh */}
+          {/* =================================================
+              REFRESH
+          ================================================= */}
 
           <button
             type="button"
             onClick={handleRefresh}
-            disabled={isRefreshing}
+            disabled={
+              isRefreshing ||
+              loading
+            }
             className="group flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200/60 bg-white px-6 py-3 text-sm font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:shadow active:scale-95 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:py-2.5"
           >
 
@@ -284,13 +419,13 @@ export default function Notifications() {
 
         </div>
 
-        {/* ================================================= */}
-        {/* SUMMARY */}
-        {/* ================================================= */}
+        {/* =================================================
+            SUMMARY
+        ================================================= */}
 
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
 
-          {/* Total */}
+          {/* TOTAL */}
 
           <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all hover:-translate-y-1 hover:shadow-lg sm:rounded-3xl">
 
@@ -326,7 +461,7 @@ export default function Notifications() {
 
           </div>
 
-          {/* Unread */}
+          {/* UNREAD */}
 
           <div className="relative overflow-hidden rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 shadow-[0_8px_30px_rgb(99,102,241,0.06)] transition-all hover:-translate-y-1 hover:shadow-lg sm:rounded-3xl">
 
@@ -363,6 +498,7 @@ export default function Notifications() {
               {unreadCount > 0 && (
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
+
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-600" />
                 </span>
               )}
@@ -371,7 +507,7 @@ export default function Notifications() {
 
           </div>
 
-          {/* Read */}
+          {/* READ */}
 
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-5 shadow-[0_8px_30px_rgb(16,185,129,0.05)] transition-all hover:-translate-y-1 hover:shadow-lg sm:rounded-3xl">
 
@@ -405,9 +541,9 @@ export default function Notifications() {
 
         </div>
 
-        {/* ================================================= */}
-        {/* ERROR */}
-        {/* ================================================= */}
+        {/* =================================================
+            ERROR
+        ================================================= */}
 
         {error &&
           notifications.length > 0 && (
@@ -421,9 +557,9 @@ export default function Notifications() {
             </div>
           )}
 
-        {/* ================================================= */}
-        {/* EMPTY */}
-        {/* ================================================= */}
+        {/* =================================================
+            EMPTY
+        ================================================= */}
 
         {notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm sm:rounded-3xl sm:p-20">
@@ -456,25 +592,32 @@ export default function Notifications() {
 
           </div>
         ) : (
-
-          /* ================================================= */
-          /* NOTIFICATION LIST */
-          /* ================================================= */
+          /* =================================================
+             NOTIFICATION LIST
+          ================================================= */
 
           <div className="grid gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
 
             {notifications.map(
-              (notification) => {
+              (
+                notification,
+                index
+              ) => {
                 const notificationId =
                   getNotificationId(
                     notification
                   );
 
+                const notificationKey =
+                  getNotificationKey(
+                    notification,
+                    index
+                  );
+
                 return (
                   <NotificationCard
                     key={
-                      notificationId ||
-                      Math.random()
+                      notificationKey
                     }
                     notification={
                       notification

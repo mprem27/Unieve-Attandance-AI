@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Navigate,
   Route,
@@ -10,6 +10,7 @@ import {
 // AUTH
 // =====================================================
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 // =====================================================
@@ -40,175 +41,565 @@ import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
 
 // =====================================================
-// 1. GLOBAL BACKGROUND ANIMATION COMPONENT
+// GLOBAL BACKGROUND ICONS
 // =====================================================
+
+const ICONS = [
+  // 1. Graduation cap
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M32 14L58 26L32 38L6 26L32 14Z" fill="currentColor"/><path d="M17 30V43C17 43 22 50 32 50C42 50 47 43 47 43V30" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M54 27V41" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="54" cy="44" r="3.5" fill="currentColor"/></svg>`,
+
+  // 2. ID card
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="13" width="48" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="22" cy="27" r="6" fill="none" stroke="currentColor" stroke-width="3"/><path d="M12 43C12 37 16.5 34 22 34C27.5 34 32 37 32 43" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="38" y1="24" x2="49" y2="24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="38" y1="31" x2="49" y2="31" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="38" y1="38" x2="45" y2="38" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+
+  // 3. Open book
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M32 20C27 15 16 15 9 17V46C16 44 27 44 32 49C37 44 48 44 55 46V17C48 15 37 15 32 20Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><line x1="32" y1="20" x2="32" y2="49" stroke="currentColor" stroke-width="3"/></svg>`,
+
+  // 4. Laptop
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="14" width="38" height="25" rx="2" fill="none" stroke="currentColor" stroke-width="3"/><path d="M25 21L20 26.5L25 32" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M39 21L44 26.5L39 32" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 47L13 39H51L58 47C58 48.5 56.5 49 55 49H9C7.5 49 6 48.5 6 47Z" fill="currentColor"/></svg>`,
+
+  // 5. Pencil
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(45 32 32)"><rect x="27" y="8" width="10" height="32" fill="currentColor"/><rect x="27" y="4" width="10" height="6" fill="currentColor" opacity="0.6"/><path d="M27 40L32 52L37 40Z" fill="currentColor"/></g></svg>`,
+
+  // 6. Diploma
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="17" y="16" width="30" height="30" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="17" cy="16" r="6.5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="17" cy="46" r="6.5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="47" cy="16" r="6.5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="47" cy="46" r="6.5" fill="none" stroke="currentColor" stroke-width="3"/><line x1="24" y1="25" x2="40" y2="25" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="24" y1="31" x2="40" y2="31" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="24" y1="37" x2="34" y2="37" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+
+  // 7. Light bulb
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M32 8C22 8 15 15 15 24C15 30 18 34 21 37C23 39 24 41 24 44H40C40 41 41 39 43 37C46 34 49 30 49 24C49 15 42 8 32 8Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><line x1="25" y1="50" x2="39" y2="50" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="27" y1="56" x2="37" y2="56" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+
+  // 8. Circuit chip
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="20" y="20" width="24" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="32" cy="32" r="5" fill="none" stroke="currentColor" stroke-width="3"/><line x1="26" y1="20" x2="26" y2="11" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="32" y1="20" x2="32" y2="11" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="38" y1="20" x2="38" y2="11" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="26" y1="44" x2="26" y2="53" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="32" y1="44" x2="32" y2="53" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="38" y1="44" x2="38" y2="53" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="20" y1="26" x2="11" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="20" y1="32" x2="11" y2="32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="20" y1="38" x2="11" y2="38" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="26" x2="53" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="32" x2="53" y2="32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="38" x2="53" y2="38" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+
+  // 9. Atom
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="32" rx="26" ry="8" transform="rotate(45 32 32)" fill="none" stroke="currentColor" stroke-width="3"/><ellipse cx="32" cy="32" rx="26" ry="8" transform="rotate(-45 32 32)" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="32" cy="32" r="6" fill="currentColor"/></svg>`,
+
+  // 10. Gear
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><circle cx="32" cy="32" r="16" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="32" cy="32" r="6" fill="none" stroke="currentColor" stroke-width="3"/><path d="M32 8v8m0 32v8m24-24h-8M16 32H8m20.5-17l-5.6-5.6m22.6 22.6l-5.6-5.6M49 49l-5.6-5.6M21.5 49l-5.6-5.6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`,
+
+  // 11. Code
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M26 16l-12 16 12 16M38 16l12 16-12 16" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+
+  // 12. Database
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="18" rx="20" ry="8" fill="none" stroke="currentColor" stroke-width="3"/><path d="M12 18v28c0 4.4 9 8 20 8s20-3.6 20-8V18" fill="none" stroke="currentColor" stroke-width="3"/><path d="M12 32c0 4.4 9 8 20 8s20-3.6 20-8" fill="none" stroke="currentColor" stroke-width="3"/></svg>`,
+];
+
+const COLORS = [
+  "#0f172a",
+  "#1e3a8a",
+  "#7f1d1d",
+  "#064e3b",
+  "#4c1d95",
+  "#000000",
+];
+
+const BG_ANIMS = [
+  "driftA",
+  "driftB",
+  "driftC",
+  "driftD",
+];
+
+const FG_ANIMS = [
+  "fgFloat1",
+  "fgFloat2",
+  "fgFloat3",
+];
+
+// =====================================================
+// BACKGROUND ANIMATION
+// =====================================================
+//
+// IMPORTANT PERFORMANCE CHANGE:
+//
+// Login and Forgot Password pages do NOT render the
+// expensive animated SVG background.
+//
+// Dashboard/admin pages continue using the existing
+// animation.
+//
+// =====================================================
+
 function BackgroundAnimation() {
-  const canvasRef = useRef(null);
+  const location = useLocation();
+
+  const isPublicPage =
+    location.pathname === "/login" ||
+    location.pathname === "/forgot-password";
+
+  const [bgElements, setBgElements] = useState([]);
+  const [fgElements, setFgElements] = useState([]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    let animationFrameId;
-    let elements = [];
-    
-    // Balanced density
-    const maxElements = 35; 
+    if (isPublicPage) {
+      setBgElements([]);
+      setFgElements([]);
+      return;
+    }
 
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
+    const isMobile =
+      window.innerWidth < 640;
 
-    window.addEventListener("resize", resize);
-    resize();
+    // Reduced slightly for better performance.
+    // Existing visual effect is preserved.
+    const bgCount = isMobile ? 20 : 35;
+    const fgCount = isMobile ? 3 : 5;
 
-    class AcademicElement {
-      constructor() {
-        this.reset();
-        // Start randomly on the screen so it's visible immediately
-        this.y = Math.random() * canvas.height;
-      }
+    const generateElements = (
+      count,
+      isForeground
+    ) => {
+      const arr = [];
 
-      reset() {
-        this.x = Math.random() * canvas.width;
-        this.y = canvas.height + 50; 
-        this.size = Math.random() * 25 + 15; 
-        
-        // UPGRADED SPEED: Auto-moving floating upwards visibly
-        this.speedY = -(Math.random() * 0.6 + 0.2); 
-        this.speedX = (Math.random() - 0.5) * 0.3; 
-        
-        // UPGRADED OPACITY: Faint but clearly visible (5% to 15%)
-        this.opacity = Math.random() * 0.10 + 0.05; 
-        
-        this.rotation = Math.random() * Math.PI * 2;
-        this.rotSpeed = (Math.random() - 0.5) * 0.008;
-        
-        // Type: 0 = ID Card, 1 = Number, 2 = Grad Cap
-        this.type = Math.floor(Math.random() * 3);
-        this.textValue = Math.random() > 0.5 ? Math.floor(Math.random() * 9000 + 1000).toString() : "0110";
-      }
+      for (
+        let i = 0;
+        i < count;
+        i++
+      ) {
+        const icon =
+          ICONS[
+            Math.floor(
+              Math.random() *
+                ICONS.length
+            )
+          ];
 
-      update() {
-        this.y += this.speedY;
-        this.x += this.speedX;
-        this.rotation += this.rotSpeed;
+        const color =
+          COLORS[
+            Math.floor(
+              Math.random() *
+                COLORS.length
+            )
+          ];
 
-        if (this.y < -60 || this.x < -60 || this.x > canvas.width + 60) {
-          this.reset();
+        const left =
+          Math.random() * 100 + "%";
+
+        if (isForeground) {
+          const size =
+            60 +
+            Math.random() * 40;
+
+          const opacity =
+            0.04 +
+            Math.random() * 0.04;
+
+          const dur =
+            60 +
+            Math.random() * 60;
+
+          const delay =
+            -(Math.random() * dur);
+
+          const anim =
+            FG_ANIMS[
+              Math.floor(
+                Math.random() *
+                  FG_ANIMS.length
+              )
+            ];
+
+          arr.push({
+            id: i,
+            icon,
+            color,
+            size,
+            left,
+            top: "0",
+            opacity,
+            anim,
+            dur,
+            delay,
+          });
+        } else {
+          const size =
+            25 +
+            Math.random() * 25;
+
+          const opacity =
+            0.3 +
+            Math.random() * 0.4;
+
+          const top =
+            Math.random() * 100 + "%";
+
+          const dur =
+            25 +
+            Math.random() * 20;
+
+          const delay =
+            -Math.random() * dur;
+
+          const anim =
+            BG_ANIMS[
+              Math.floor(
+                Math.random() *
+                  BG_ANIMS.length
+              )
+            ];
+
+          arr.push({
+            id: i,
+            icon,
+            color,
+            size,
+            left,
+            top,
+            opacity,
+            anim,
+            dur,
+            delay,
+          });
         }
       }
 
-      draw() {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.rotation);
-        
-        // Emerald/Dark Green palette to match theme
-        ctx.strokeStyle = `rgba(24, 94, 58, ${this.opacity})`; 
-        ctx.fillStyle = `rgba(16, 185, 129, ${this.opacity})`; 
-        ctx.lineWidth = 1.5;
-
-        switch(this.type) {
-          case 0: // ID CARD DESIGN
-            let w = this.size * 1.4;
-            let h = this.size * 0.9;
-            ctx.strokeRect(-w/2, -h/2, w, h);
-            ctx.strokeRect(-w/2 + 6, -h/2 + 6, w*0.3, h*0.5);
-            ctx.beginPath();
-            ctx.moveTo(-w/2 + w*0.45, -h/2 + 10); ctx.lineTo(w/2 - 6, -h/2 + 10);
-            ctx.moveTo(-w/2 + w*0.45, -h/2 + 18); ctx.lineTo(w/2 - 12, -h/2 + 18);
-            ctx.stroke();
-            break;
-
-          case 1: // STUDENT NUMBERS
-            ctx.font = `600 ${this.size * 0.7}px system-ui`;
-            ctx.fillText(this.textValue, -this.size/2, 0);
-            break;
-
-          case 2: // GRADUATION CAP SYMBOL
-            let s = this.size;
-            ctx.beginPath();
-            ctx.moveTo(0, -s/3);
-            ctx.lineTo(s/2, 0);
-            ctx.lineTo(0, s/3);
-            ctx.lineTo(-s/2, 0);
-            ctx.closePath();
-            ctx.moveTo(-s/4, s/8);
-            ctx.quadraticCurveTo(0, s/3, s/4, s/8);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(s/2, 0);
-            ctx.lineTo(s/2 + 4, s/4);
-            ctx.stroke();
-            break;
-          default:
-            break;
-        }
-        ctx.restore();
-      }
-    }
-
-    for (let i = 0; i < maxElements; i++) {
-      elements.push(new AcademicElement());
-    }
-
-    const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (let i = 0; i < elements.length; i++) {
-        elements[i].update();
-        elements[i].draw();
-      }
-      animationFrameId = requestAnimationFrame(animate);
+      return arr;
     };
 
-    animate();
+    setBgElements(
+      generateElements(
+        bgCount,
+        false
+      )
+    );
+
+    setFgElements(
+      generateElements(
+        fgCount,
+        true
+      )
+    );
 
     return () => {
-      window.removeEventListener("resize", resize);
-      cancelAnimationFrame(animationFrameId);
+      setBgElements([]);
+      setFgElements([]);
     };
-  }, []);
+  }, [isPublicPage]);
+
+  // -----------------------------------------------------
+  // Do not render animation on authentication pages.
+  // -----------------------------------------------------
+
+  if (isPublicPage) {
+    return null;
+  }
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 w-full h-full pointer-events-none"
-      // The canvas acts as the actual background color for the whole site
-      style={{ zIndex: -1, backgroundColor: "#f8f9fb" }}
-    />
+    <>
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            .floating-bg {
+              position: fixed;
+              inset: 0;
+              overflow: hidden;
+              pointer-events: none;
+            }
+
+            .float-icon {
+              position: absolute;
+              will-change: transform, opacity;
+              animation-timing-function: linear;
+              animation-iteration-count: infinite;
+            }
+
+            .float-icon svg {
+              display: block;
+              width: 100%;
+              height: 100%;
+              overflow: visible;
+            }
+
+            @keyframes driftA {
+              0%, 100% {
+                transform:
+                  translate(0, 0)
+                  rotate(0deg)
+                  scale(1);
+              }
+
+              50% {
+                transform:
+                  translate(30px, -60px)
+                  rotate(15deg)
+                  scale(1.05);
+              }
+            }
+
+            @keyframes driftB {
+              0%, 100% {
+                transform:
+                  translate(0, 0)
+                  rotate(0deg)
+                  scale(1);
+              }
+
+              50% {
+                transform:
+                  translate(-35px, -50px)
+                  rotate(-12deg)
+                  scale(0.95);
+              }
+            }
+
+            @keyframes driftC {
+              0%, 100% {
+                transform:
+                  translate(0, 0)
+                  rotate(0deg)
+                  scale(1);
+              }
+
+              33% {
+                transform:
+                  translate(25px, -30px)
+                  rotate(8deg)
+                  scale(1.04);
+              }
+
+              66% {
+                transform:
+                  translate(-20px, -60px)
+                  rotate(-8deg)
+                  scale(0.96);
+              }
+            }
+
+            @keyframes driftD {
+              0%, 100% {
+                transform:
+                  translate(0, 0)
+                  rotate(0deg)
+                  scale(1);
+              }
+
+              50% {
+                transform:
+                  translate(0px, -80px)
+                  rotate(20deg)
+                  scale(1.1);
+              }
+            }
+
+            @keyframes fgFloat1 {
+              0% {
+                transform:
+                  translateY(110vh)
+                  rotate(0deg);
+                opacity: 0;
+              }
+
+              2% {
+                opacity: var(--max-opacity);
+              }
+
+              8% {
+                opacity: var(--max-opacity);
+              }
+
+              10% {
+                transform:
+                  translateY(-110vh)
+                  rotate(45deg);
+                opacity: 0;
+              }
+
+              100% {
+                transform:
+                  translateY(-110vh)
+                  rotate(45deg);
+                opacity: 0;
+              }
+            }
+
+            @keyframes fgFloat2 {
+              0% {
+                transform:
+                  translate(-20vw, 110vh)
+                  rotate(0deg);
+                opacity: 0;
+              }
+
+              2% {
+                opacity: var(--max-opacity);
+              }
+
+              8% {
+                opacity: var(--max-opacity);
+              }
+
+              10% {
+                transform:
+                  translate(20vw, -110vh)
+                  rotate(-30deg);
+                opacity: 0;
+              }
+
+              100% {
+                transform:
+                  translate(20vw, -110vh)
+                  rotate(-30deg);
+                opacity: 0;
+              }
+            }
+
+            @keyframes fgFloat3 {
+              0% {
+                transform:
+                  translate(20vw, 110vh)
+                  rotate(0deg);
+                opacity: 0;
+              }
+
+              2% {
+                opacity: var(--max-opacity);
+              }
+
+              8% {
+                opacity: var(--max-opacity);
+              }
+
+              10% {
+                transform:
+                  translate(-20vw, -110vh)
+                  rotate(60deg);
+                opacity: 0;
+              }
+
+              100% {
+                transform:
+                  translate(-20vw, -110vh)
+                  rotate(60deg);
+                opacity: 0;
+              }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+              .float-icon {
+                animation: none !important;
+              }
+            }
+          `,
+        }}
+      />
+
+      {/* =================================================
+          BACKGROUND LAYER
+      ================================================= */}
+
+      <div
+        className="floating-bg"
+        style={{
+          zIndex: 0,
+        }}
+        aria-hidden="true"
+      >
+        {bgElements.map(
+          (el) => (
+            <div
+              key={`bg-${el.id}`}
+              className="float-icon"
+              style={{
+                width: `${el.size}px`,
+                height: `${el.size}px`,
+                left: el.left,
+                top: el.top,
+                color: el.color,
+                opacity:
+                  el.opacity.toFixed(
+                    2
+                  ),
+                animation:
+                  `${el.anim} ${el.dur}s ${el.delay}s infinite ease-in-out`,
+              }}
+              dangerouslySetInnerHTML={{
+                __html: el.icon,
+              }}
+            />
+          )
+        )}
+      </div>
+
+      {/* =================================================
+          FOREGROUND LAYER
+          Reduced z-index so it never sits above UI.
+      ================================================= */}
+
+      <div
+        className="floating-bg"
+        style={{
+          zIndex: 0,
+        }}
+        aria-hidden="true"
+      >
+        {fgElements.map(
+          (el) => (
+            <div
+              key={`fg-${el.id}`}
+              className="float-icon"
+              style={{
+                width: `${el.size}px`,
+                height: `${el.size}px`,
+                left: el.left,
+                top: el.top,
+                color: el.color,
+                "--max-opacity":
+                  el.opacity.toFixed(
+                    3
+                  ),
+                opacity: 0,
+                animation:
+                  `${el.anim} ${el.dur}s ${el.delay}s infinite linear`,
+              }}
+              dangerouslySetInnerHTML={{
+                __html: el.icon,
+              }}
+            />
+          )
+        )}
+      </div>
+    </>
   );
 }
 
 // =====================================================
-// 2. DASHBOARD LAYOUT
+// DASHBOARD LAYOUT
 // =====================================================
-function DashboardLayout({ children }) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const location = useLocation();
 
-  // Close sidebar on mobile when navigating to a new route
+function DashboardLayout({
+  children,
+}) {
+  const [
+    isSidebarOpen,
+    setIsSidebarOpen,
+  ] = useState(false);
+
+  const location =
+    useLocation();
+
   useEffect(() => {
     setIsSidebarOpen(false);
   }, [location.pathname]);
 
   return (
-    // Background is completely transparent here so the global canvas shows through
-    <div className="min-h-screen font-sans text-slate-800 antialiased bg-transparent selection:bg-emerald-100 selection:text-emerald-900">
-      
+    <div className="min-h-screen font-sans text-slate-800 antialiased bg-transparent selection:bg-indigo-100 selection:text-indigo-900">
+
       <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
+        isOpen={
+          isSidebarOpen
+        }
+        onClose={() =>
+          setIsSidebarOpen(false)
+        }
       />
 
       <div className="flex min-h-screen flex-col transition-all duration-300 lg:pl-72">
-        
+
         <Navbar
-          onMenuClick={() => setIsSidebarOpen(true)}
+          onMenuClick={() =>
+            setIsSidebarOpen(true)
+          }
         />
 
-        <main className="min-w-0 flex-1 animate-[fadeIn_0.4s_ease-out_forwards]">
+        <main className="min-w-0 flex-1 relative z-10 animate-[fadeIn_0.4s_ease-out_forwards]">
           {children}
         </main>
 
@@ -218,72 +609,315 @@ function DashboardLayout({ children }) {
 }
 
 // =====================================================
-// 3. MAIN APP
+// MAIN APP
 // =====================================================
+
 export default function App() {
   return (
     <>
-      {/* GLOBAL STYLES FIXES */}
-      <style dangerouslySetInnerHTML={{__html: `
-        /* This FORCES the main HTML containers to be transparent so the canvas works */
-        body, html, #root {
-          background-color: transparent !important;
-          min-height: 100vh;
-        }
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0');
 
-        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0');
-        .material-symbols-outlined {
-          font-family: 'Material Symbols Outlined' !important;
-          font-weight: normal;
-          font-style: normal;
-          font-size: 24px;
-          line-height: 1;
-          letter-spacing: normal;
-          text-transform: none;
-          display: inline-block;
-          white-space: nowrap;
-          word-wrap: normal;
-          direction: ltr;
-          -webkit-font-feature-settings: 'liga';
-          -webkit-font-smoothing: antialiased;
-        }
+            .material-symbols-outlined {
+              font-family:
+                'Material Symbols Outlined' !important;
 
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}} />
+              font-weight: normal;
+              font-style: normal;
+              font-size: 24px;
+              line-height: 1;
+              letter-spacing: normal;
+              text-transform: none;
+              display: inline-block;
+              white-space: nowrap;
+              word-wrap: normal;
+              direction: ltr;
 
-      {/* GLOBAL ACADEMIC ANIMATION BACKGROUND */}
+              -webkit-font-feature-settings:
+                'liga';
+
+              -webkit-font-smoothing:
+                antialiased;
+            }
+
+            body,
+            html,
+            #root {
+              background-color: #f8fafc !important;
+              min-height: 100vh;
+              margin: 0;
+            }
+
+            @keyframes fadeIn {
+              from {
+                opacity: 0;
+                transform:
+                  translateY(10px);
+              }
+
+              to {
+                opacity: 1;
+                transform:
+                  translateY(0);
+              }
+            }
+          `,
+        }}
+      />
+
+      {/* =================================================
+          GLOBAL BACKGROUND
+      ================================================= */}
+
       <BackgroundAnimation />
 
-      {/* Content wrapper ensures routing sits on top of the fixed background */}
-      <div className="relative z-10 bg-transparent min-h-screen">
+      {/* =================================================
+          ROUTING
+      ================================================= */}
+
+      <div className="relative z-10">
+
         <Routes>
-          {/* PUBLIC */}
-          <Route path="/login" element={<Login />} />
 
-          {/* STUDENT PAGES */}
-          <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout><Dashboard /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/attendance" element={<ProtectedRoute><DashboardLayout><Attendance /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/attendance/subject/:subjectId" element={<ProtectedRoute><DashboardLayout><SubjectDetails /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/timetable" element={<ProtectedRoute><DashboardLayout><Timetable /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/notifications" element={<ProtectedRoute><DashboardLayout><Notifications /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/profile" element={<ProtectedRoute><DashboardLayout><Profile /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/change-password" element={<ProtectedRoute><DashboardLayout><ChangePassword /></DashboardLayout></ProtectedRoute>} />
+          {/* =================================================
+              PUBLIC
+          ================================================= */}
 
-          {/* ADMIN PAGES */}
-          <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><DashboardLayout><AdminDashboard /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/admin/users" element={<ProtectedRoute allowedRoles={["admin"]}><DashboardLayout><Users /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/admin/users/:userId" element={<ProtectedRoute allowedRoles={["admin"]}><DashboardLayout><UserDetails /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/admin/users/:userId/edit" element={<ProtectedRoute allowedRoles={["admin"]}><DashboardLayout><EditUser /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/admin/sync-status" element={<ProtectedRoute allowedRoles={["admin"]}><DashboardLayout><SyncStatus /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/admin/sms-logs" element={<ProtectedRoute allowedRoles={["admin"]}><DashboardLayout><SMSLogs /></DashboardLayout></ProtectedRoute>} />
+          <Route
+            path="/login"
+            element={<Login />}
+          />
 
-          {/* FALLBACK ROUTES */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route
+            path="/forgot-password"
+            element={
+              <ForgotPassword />
+            }
+          />
+
+          {/* =================================================
+              STUDENT - DASHBOARD
+          ================================================= */}
+
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Dashboard />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =================================================
+              STUDENT - ATTENDANCE
+          ================================================= */}
+
+          <Route
+            path="/attendance"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Attendance />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/attendance/subject/:subjectId"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <SubjectDetails />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =================================================
+              STUDENT - TIMETABLE
+          ================================================= */}
+
+          <Route
+            path="/timetable"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Timetable />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =================================================
+              STUDENT - NOTIFICATIONS
+          ================================================= */}
+
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Notifications />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =================================================
+              STUDENT - PROFILE
+          ================================================= */}
+
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Profile />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =================================================
+              STUDENT - CHANGE PASSWORD
+          ================================================= */}
+
+          <Route
+            path="/change-password"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <ChangePassword />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =================================================
+              ADMIN
+          ================================================= */}
+
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  "admin",
+                ]}
+              >
+                <DashboardLayout>
+                  <AdminDashboard />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  "admin",
+                ]}
+              >
+                <DashboardLayout>
+                  <Users />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/users/:userId"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  "admin",
+                ]}
+              >
+                <DashboardLayout>
+                  <UserDetails />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/users/:userId/edit"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  "admin",
+                ]}
+              >
+                <DashboardLayout>
+                  <EditUser />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/sync-status"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  "admin",
+                ]}
+              >
+                <DashboardLayout>
+                  <SyncStatus />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/sms-logs"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  "admin",
+                ]}
+              >
+                <DashboardLayout>
+                  <SMSLogs />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =================================================
+              FALLBACK
+          ================================================= */}
+
+          <Route
+            path="/"
+            element={
+              <Navigate
+                to="/dashboard"
+                replace
+              />
+            }
+          />
+
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to="/dashboard"
+                replace
+              />
+            }
+          />
+
         </Routes>
+
       </div>
     </>
   );

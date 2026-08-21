@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* =====================================================
+   ANIMATIONS
+   ===================================================== */
 @keyframes slideUp {
   from {
     transform: translateY(100%);
@@ -13,7 +16,6 @@
   animation: slideUp 0.3s ease;
 }
 
-/* Added fadeInUp keyframes for smooth dashboard section entry */
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -29,14 +31,36 @@
   animation: fadeInUp 0.8s ease-out forwards;
 }
 
+/* Added for Dashboard Layout Page Transitions */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+/* =====================================================
+   GLOBAL BASE STYLES
+   ===================================================== */
 html {
   scroll-behavior: smooth;
 }
 
-body {
+/* CRITICAL: Must be transparent for the Canvas Animation to show through */
+html, body, #root {
   margin: 0;
+  padding: 0;
   min-width: 320px;
   min-height: 100vh;
+  background-color: transparent !important; 
   font-family:
     Inter,
     system-ui,
@@ -44,4 +68,25 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+}
+
+/* =====================================================
+   CUSTOM UTILITIES
+   ===================================================== */
+/* Custom Scrollbar for Dashboard Lists */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1; 
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8; 
 }

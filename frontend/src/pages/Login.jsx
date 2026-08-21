@@ -21,7 +21,8 @@ function Login() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] =
+    useState(false);
 
   // =====================================================
   // INPUT HANDLER
@@ -42,6 +43,18 @@ function Login() {
   };
 
   // =====================================================
+  // FORGOT PASSWORD
+  // =====================================================
+
+  const handleForgotPassword = () => {
+    if (loading) {
+      return;
+    }
+
+    navigate("/forgot-password");
+  };
+
+  // =====================================================
   // LOGIN
   // =====================================================
 
@@ -58,12 +71,16 @@ function Login() {
     // -----------------------------------------------------
 
     if (!email) {
-      setError("Please enter your email address.");
+      setError(
+        "Please enter your email address."
+      );
       return;
     }
 
     if (!password) {
-      setError("Please enter your password.");
+      setError(
+        "Please enter your password."
+      );
       return;
     }
 
@@ -127,7 +144,8 @@ function Login() {
         err?.message;
 
       if (
-        typeof backendMessage === "string" &&
+        typeof backendMessage ===
+          "string" &&
         backendMessage.trim()
       ) {
         setError(
@@ -323,12 +341,31 @@ function Login() {
 
               <div className="space-y-1.5">
 
-                <label
-                  htmlFor="password"
-                  className="text-xs font-bold uppercase tracking-wider text-slate-500"
-                >
-                  Password
-                </label>
+                <div className="flex items-center justify-between">
+
+                  <label
+                    htmlFor="password"
+                    className="text-xs font-bold uppercase tracking-wider text-slate-500"
+                  >
+                    Password
+                  </label>
+
+                  {/* =================================================
+                      FORGOT PASSWORD
+                  ================================================= */}
+
+                  <button
+                    type="button"
+                    onClick={
+                      handleForgotPassword
+                    }
+                    disabled={loading}
+                    className="text-xs font-bold text-indigo-600 transition-colors hover:text-violet-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Forgot Password?
+                  </button>
+
+                </div>
 
                 <div className="group relative">
 
@@ -551,6 +588,7 @@ function Login() {
               <div className="relative flex h-36 w-36 items-center justify-center rounded-full border-[12px] border-indigo-400/30">
 
                 <div className="text-center">
+
                   <p className="text-4xl font-black text-white">
                     79%
                   </p>
@@ -558,6 +596,7 @@ function Login() {
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-300">
                     Overall
                   </p>
+
                 </div>
 
               </div>
@@ -569,6 +608,7 @@ function Login() {
             <div className="space-y-3">
 
               <div className="flex items-center justify-between rounded-xl bg-white/5 p-3.5 ring-1 ring-white/10">
+
                 <span className="text-xs font-semibold text-slate-200">
                   Coding Practices-II
                 </span>
@@ -576,9 +616,11 @@ function Login() {
                 <span className="text-xs font-black text-emerald-400">
                   90%
                 </span>
+
               </div>
 
               <div className="flex items-center justify-between rounded-xl bg-white/5 p-3.5 ring-1 ring-white/10">
+
                 <span className="text-xs font-semibold text-slate-200">
                   Innovation & Ent.
                 </span>
@@ -586,9 +628,11 @@ function Login() {
                 <span className="text-xs font-black text-emerald-400">
                   92%
                 </span>
+
               </div>
 
               <div className="flex items-center justify-between rounded-xl bg-white/5 p-3.5 ring-1 ring-white/10">
+
                 <span className="text-xs font-semibold text-slate-200">
                   Python Prog.
                 </span>
@@ -596,6 +640,7 @@ function Login() {
                 <span className="text-xs font-black text-rose-400">
                   57%
                 </span>
+
               </div>
 
             </div>

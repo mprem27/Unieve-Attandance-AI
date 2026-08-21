@@ -106,12 +106,6 @@ class UserDocument(BaseModel):
     # =====================================================
     # ENCRYPTED COLLEGE PORTAL PASSWORD
     # =====================================================
-    #
-    # NEVER store the actual AMS password.
-    #
-    # The password should be encrypted before being
-    # stored in MongoDB.
-    #
 
     portalPasswordEncrypted: Optional[str] = None
 
@@ -162,6 +156,45 @@ class UserDocument(BaseModel):
     active: bool = True
 
     forcePasswordChange: bool = False
+
+    # =====================================================
+    # PASSWORD CHANGE TRACKING
+    # =====================================================
+    #
+    # Password can be changed only once every 30 days.
+    #
+    # This stores ONLY the date/time of the last successful
+    # application-password change.
+    #
+    passwordLastChangedAt: Optional[datetime] = None
+
+    # =====================================================
+    # PASSWORD OTP
+    # =====================================================
+    #
+    # OTP itself is NEVER stored.
+    # Only the SHA-256 hash is stored.
+    #
+
+    passwordOtpHash: Optional[str] = None
+
+    passwordOtpExpiresAt: Optional[datetime] = None
+
+    passwordOtpAttempts: int = 0
+
+    passwordOtpRequestedAt: Optional[datetime] = None
+
+    # =====================================================
+    # PASSWORD OTP VERIFICATION
+    # =====================================================
+    #
+    # Temporary verification token used after successful
+    # OTP verification.
+    #
+
+    passwordOtpVerifiedHash: Optional[str] = None
+
+    passwordOtpVerifiedExpiresAt: Optional[datetime] = None
 
     # =====================================================
     # COLLEGE PORTAL SYNC

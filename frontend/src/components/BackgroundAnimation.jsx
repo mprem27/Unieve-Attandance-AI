@@ -1,274 +1,178 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
+
+// =====================================================
+// 12 HIGH-QUALITY 2D VECTOR ICONS
+// =====================================================
+const ICONS = [
+  // 1. Graduation cap
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M32 14L58 26L32 38L6 26L32 14Z" fill="currentColor"/><path d="M17 30V43C17 43 22 50 32 50C42 50 47 43 47 43V30" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M54 27V41" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="54" cy="44" r="3.5" fill="currentColor"/></svg>`,
+  // 2. ID card
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="13" width="48" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="22" cy="27" r="6" fill="none" stroke="currentColor" stroke-width="3"/><path d="M12 43C12 37 16.5 34 22 34C27.5 34 32 37 32 43" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="38" y1="24" x2="49" y2="24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="38" y1="31" x2="49" y2="31" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="38" y1="38" x2="45" y2="38" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  // 3. Open book
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M32 20C27 15 16 15 9 17V46C16 44 27 44 32 49C37 44 48 44 55 46V17C48 15 37 15 32 20Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><line x1="32" y1="20" x2="32" y2="49" stroke="currentColor" stroke-width="3"/></svg>`,
+  // 4. Laptop with code brackets
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="14" width="38" height="25" rx="2" fill="none" stroke="currentColor" stroke-width="3"/><path d="M25 21L20 26.5L25 32" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M39 21L44 26.5L39 32" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 47L13 39H51L58 47C58 48.5 56.5 49 55 49H9C7.5 49 6 48.5 6 47Z" fill="currentColor"/></svg>`,
+  // 5. Pencil
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(45 32 32)"><rect x="27" y="8" width="10" height="32" fill="currentColor"/><rect x="27" y="4" width="10" height="6" fill="currentColor" opacity="0.6"/><path d="M27 40L32 52L37 40Z" fill="currentColor"/></g></svg>`,
+  // 6. Diploma / certificate
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="17" y="16" width="30" height="30" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="17" cy="16" r="6.5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="17" cy="46" r="6.5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="47" cy="16" r="6.5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="47" cy="46" r="6.5" fill="none" stroke="currentColor" stroke-width="3"/><line x1="24" y1="25" x2="40" y2="25" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="24" y1="31" x2="40" y2="31" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="24" y1="37" x2="34" y2="37" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  // 7. Light bulb
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M32 8C22 8 15 15 15 24C15 30 18 34 21 37C23 39 24 41 24 44H40C40 41 41 39 43 37C46 34 49 30 49 24C49 15 42 8 32 8Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><line x1="25" y1="50" x2="39" y2="50" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="27" y1="56" x2="37" y2="56" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  // 8. Circuit chip
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="20" y="20" width="24" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="32" cy="32" r="5" fill="none" stroke="currentColor" stroke-width="3"/><line x1="26" y1="20" x2="26" y2="11" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="32" y1="20" x2="32" y2="11" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="38" y1="20" x2="38" y2="11" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="26" y1="44" x2="26" y2="53" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="32" y1="44" x2="32" y2="53" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="38" y1="44" x2="38" y2="53" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="20" y1="26" x2="11" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="20" y1="32" x2="11" y2="32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="20" y1="38" x2="11" y2="38" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="26" x2="53" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="32" x2="53" y2="32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="38" x2="53" y2="38" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  // 9. Science Atom
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="32" rx="26" ry="8" transform="rotate(45 32 32)" fill="none" stroke="currentColor" stroke-width="3"/><ellipse cx="32" cy="32" rx="26" ry="8" transform="rotate(-45 32 32)" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="32" cy="32" r="6" fill="currentColor"/></svg>`,
+  // 10. Mechanical Gear
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><circle cx="32" cy="32" r="16" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="32" cy="32" r="6" fill="none" stroke="currentColor" stroke-width="3"/><path d="M32 8v8m0 32v8m24-24h-8M16 32H8m20.5-17l-5.6-5.6m22.6 22.6l-5.6-5.6M49 49l-5.6-5.6M21.5 49l-5.6-5.6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`,
+  // 11. Code Brackets { }
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M26 12l-12 20 12 20M38 12l12 20-12 20" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  // 12. Database / Server Stack
+  `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="18" rx="20" ry="8" fill="none" stroke="currentColor" stroke-width="3"/><path d="M12 18v28c0 4.4 9 8 20 8s20-3.6 20-8V18" fill="none" stroke="currentColor" stroke-width="3"/><path d="M12 32c0 4.4 9 8 20 8s20-3.6 20-8" fill="none" stroke="currentColor" stroke-width="3"/></svg>`
+];
+
+// Dark, bold color palette
+const COLORS = ['#0f172a', '#1e3a8a', '#7f1d1d', '#064e3b', '#4c1d95', '#000000'];
+const ANIMS  = ['driftA', 'driftB', 'driftC', 'driftD'];
 
 export default function BackgroundAnimation() {
-  const canvasRef = useRef(null);
+  const [bgElements, setBgElements] = useState([]);
+  const [fgElements, setFgElements] = useState([]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let animationFrameId;
-    let elements = [];
-    
-    // Balanced density for the larger 3D elements
-    const maxElements = 45; 
+    const isMobile = window.innerWidth < 640;
+    const bgCount = isMobile ? 25 : 45; // Items behind the cards
+    const fgCount = isMobile ? 8 : 15;  // Items floating ON TOP
 
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+    const generateElements = (count, isForeground) => {
+      const arr = [];
+      for (let i = 0; i < count; i++) {
+        const icon = ICONS[Math.floor(Math.random() * ICONS.length)];
+        const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+        
+        // Background items are smaller and slightly more transparent
+        // Foreground items are huge, dark, and highly visible
+        const size = isForeground 
+          ? 50 + Math.random() * 40   // 50px - 90px
+          : 25 + Math.random() * 25;  // 25px - 50px
+          
+        const opacity = isForeground
+          ? 0.4 + Math.random() * 0.4 // 40% - 80% opacity
+          : 0.1 + Math.random() * 0.2; // 10% - 30% opacity
+
+        const left = Math.random() * 100 + "%";
+        const top = Math.random() * 100 + "%";
+        
+        // Foreground items move slightly faster
+        const dur = isForeground 
+          ? 15 + Math.random() * 15   // 15s - 30s
+          : 25 + Math.random() * 20;  // 25s - 45s
+          
+        const delay = -Math.random() * dur; 
+        const anim = ANIMS[Math.floor(Math.random() * ANIMS.length)];
+
+        arr.push({ id: i, icon, color, size, left, top, opacity, anim, dur, delay });
+      }
+      return arr;
     };
 
-    window.addEventListener('resize', resize);
-    resize();
-
-    class AcademicElement {
-      constructor() {
-        this.reset();
-        // Randomize starting Y anywhere on screen for initial load
-        this.y = Math.random() * canvas.height;
-      }
-
-      reset() {
-        this.x = Math.random() * canvas.width;
-        this.y = canvas.height + 100; // Start safely below bottom view
-        
-        // Larger sizes to show off the 3D details
-        this.size = Math.random() * 25 + 20; 
-        
-        // Floating upwards
-        this.speedY = -(Math.random() * 0.5 + 0.2); 
-        this.speedX = (Math.random() - 0.5) * 0.3; 
-        
-        // HIGH OPACITY for bold visibility
-        this.opacity = Math.random() * 0.20 + 0.80; 
-        
-        this.rotation = Math.random() * Math.PI * 2;
-        this.rotSpeed = (Math.random() - 0.5) * 0.01;
-
-        // 🚀 NEW COLOR PALETTE (RGB Arrays for 3D processing)
-        // 1. Pure Black, 2. Dark Royal Blue, 3. Crimson Red
-        const palettes = [
-          { r: 20, g: 25, b: 35 },   // Slate Black
-          { r: 0, g: 51, b: 153 },   // Dark Blue
-          { r: 185, g: 28, b: 28 }   // Dark Red
-        ];
-        this.color = palettes[Math.floor(Math.random() * palettes.length)];
-        
-        // 15 Different Motifs representing all categories requested
-        this.type = Math.floor(Math.random() * 15);
-      }
-
-      update() {
-        this.y += this.speedY;
-        this.x += this.speedX;
-        this.rotation += this.rotSpeed;
-
-        if (this.y < -120 || this.x < -120 || this.x > canvas.width + 120) {
-          this.reset();
-        }
-      }
-
-      drawShape(ctx, s) {
-        // Renders the specific motif path/text
-        switch(this.type) {
-          // --- CS & IT MOTIFS ---
-          case 0: // Binary Code
-            ctx.font = `bold ${s}px monospace`;
-            ctx.fillText("1010", -s*1.2, s/3);
-            ctx.strokeText("1010", -s*1.2, s/3);
-            break;
-          case 1: // Code Brackets
-            ctx.font = `bold ${s*1.2}px monospace`;
-            ctx.fillText("{ }", -s, s/3);
-            ctx.strokeText("{ }", -s, s/3);
-            break;
-          case 2: // Code Tags
-            ctx.font = `900 ${s*1.2}px monospace`;
-            ctx.fillText("</>", -s*1.2, s/3);
-            ctx.strokeText("</>", -s*1.2, s/3);
-            break;
-          case 3: // Cloud Database
-            ctx.beginPath();
-            ctx.ellipse(0, -s/2, s, s/3, 0, 0, Math.PI*2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.ellipse(0, 0, s, s/3, 0, 0, Math.PI*2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.ellipse(0, s/2, s, s/3, 0, 0, Math.PI*2);
-            ctx.stroke();
-            break;
-
-          // --- TRADITIONAL ACADEMIC ---
-          case 4: // Grad Cap
-            ctx.beginPath();
-            ctx.moveTo(0, -s/2); ctx.lineTo(s, 0); ctx.lineTo(0, s/2); ctx.lineTo(-s, 0);
-            ctx.closePath();
-            ctx.fill(); ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(-s/2, s/4); ctx.quadraticCurveTo(0, s*0.8, s/2, s/4);
-            ctx.stroke();
-            break;
-          case 5: // ID Badge
-            let w = s * 1.4; let h = s * 2;
-            ctx.fillRect(-w/2, -h/2, w, h);
-            ctx.strokeRect(-w/2, -h/2, w, h);
-            ctx.clearRect(-w/2 + 4, -h/2 + 4, w*0.4, h*0.4);
-            ctx.beginPath();
-            ctx.moveTo(-w/2 + w*0.55, -h/2 + 10); ctx.lineTo(w/2 - 6, -h/2 + 10);
-            ctx.moveTo(-w/2 + w*0.55, -h/2 + 20); ctx.lineTo(w/2 - 6, -h/2 + 20);
-            ctx.stroke();
-            break;
-          case 6: // Stacked Books
-            ctx.fillRect(-s, -s/2, s*2, s/3); ctx.strokeRect(-s, -s/2, s*2, s/3);
-            ctx.fillRect(-s*1.1, -s/6, s*2.2, s/3); ctx.strokeRect(-s*1.1, -s/6, s*2.2, s/3);
-            ctx.fillRect(-s*0.9, s/6, s*1.8, s/3); ctx.strokeRect(-s*0.9, s/6, s*1.8, s/3);
-            break;
-
-          // --- ENGINEERING MOTIFS ---
-          case 7: // Interlocking Gear
-            ctx.beginPath();
-            ctx.arc(0, 0, s*0.6, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(0, 0, s*0.2, 0, Math.PI * 2);
-            ctx.fill();
-            let teeth = 8;
-            ctx.beginPath();
-            for (let j = 0; j < teeth; j++) {
-              let angle = (j / teeth) * Math.PI * 2;
-              ctx.moveTo(Math.cos(angle) * s * 0.6, Math.sin(angle) * s * 0.6);
-              ctx.lineTo(Math.cos(angle) * s * 0.9, Math.sin(angle) * s * 0.9);
-            }
-            ctx.stroke();
-            break;
-          case 8: // Orbiting Atom
-            ctx.beginPath();
-            ctx.ellipse(0, 0, s, s/3, Math.PI/4, 0, Math.PI*2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.ellipse(0, 0, s, s/3, -Math.PI/4, 0, Math.PI*2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(0, 0, s/4, 0, Math.PI*2);
-            ctx.fill();
-            break;
-          case 9: // Circuit Board Nodes
-            ctx.beginPath();
-            ctx.moveTo(-s, -s); ctx.lineTo(0,0); ctx.lineTo(s, -s/2);
-            ctx.moveTo(0,0); ctx.lineTo(s/2, s);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(-s, -s, s/4, 0, Math.PI*2);
-            ctx.arc(s, -s/2, s/4, 0, Math.PI*2);
-            ctx.arc(s/2, s, s/4, 0, Math.PI*2);
-            ctx.fill();
-            break;
-
-          // --- MATH & CORE STEM ---
-          case 10: // Infinity
-            ctx.font = `bold ${s*1.8}px serif`;
-            ctx.fillText("∞", -s, s/2);
-            ctx.strokeText("∞", -s, s/2);
-            break;
-          case 11: // Pi Sign
-            ctx.font = `bold ${s*1.5}px serif`;
-            ctx.fillText("π", -s/1.5, s/2.5);
-            ctx.strokeText("π", -s/1.5, s/2.5);
-            break;
-          case 12: // Sine Wave
-            ctx.beginPath();
-            ctx.moveTo(-s, 0);
-            ctx.bezierCurveTo(-s/2, -s*1.5, s/2, s*1.5, s, 0);
-            ctx.stroke();
-            break;
-
-          // --- CAMPUS LIFESTYLE ---
-          case 13: // Wi-Fi Signal
-            ctx.beginPath();
-            ctx.arc(0, s/2, s, Math.PI*1.2, Math.PI*1.8);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(0, s/2, s*0.6, Math.PI*1.2, Math.PI*1.8);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(0, s/2, s*0.2, 0, Math.PI*2);
-            ctx.fill();
-            break;
-          case 14: // Laptop
-            ctx.strokeRect(-s, -s/2, s*2, s);
-            ctx.fillRect(-s*1.2, s/2, s*2.4, s/4);
-            break;
-        }
-      }
-
-      draw() {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.rotation);
-        
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-
-        // 🚀 3D EXTRUSION EFFECT: Draw the same shape 6 times, offsetting it to create depth
-        for (let i = 5; i >= 0; i--) {
-          ctx.save();
-          // Shift each layer slightly down and right to simulate 3D blockiness
-          ctx.translate(i * 1.5, i * 1.5); 
-          
-          // Bottom layers are darker to simulate shadow/depth, top layer is bright
-          const isTopLayer = (i === 0);
-          
-          // Make base color darker for the 3D shadow sides
-          const depthMultiplier = isTopLayer ? 1 : 0.4;
-          const r = Math.floor(this.color.r * depthMultiplier);
-          const g = Math.floor(this.color.g * depthMultiplier);
-          const b = Math.floor(this.color.b * depthMultiplier);
-          
-          ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${this.opacity})`;
-          ctx.fillStyle = isTopLayer ? `rgba(255, 255, 255, 0.1)` : `rgba(${r}, ${g}, ${b}, ${this.opacity})`; 
-          
-          // Ultra thick lines for bold cartoon 3D look
-          ctx.lineWidth = isTopLayer ? 3.0 : 4.0;
-
-          // Draw the actual path
-          this.drawShape(ctx, this.size);
-          
-          ctx.restore();
-        }
-        
-        ctx.restore();
-      }
-    }
-
-    // Initialize elements
-    for (let i = 0; i < maxElements; i++) {
-      elements.push(new AcademicElement());
-    }
-
-    const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (let i = 0; i < elements.length; i++) {
-        elements[i].update();
-        elements[i].draw();
-      }
-      animationFrameId = requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    // Cleanup on unmount
-    return () => {
-      window.removeEventListener('resize', resize);
-      cancelAnimationFrame(animationFrameId);
-    };
+    setBgElements(generateElements(bgCount, false));
+    setFgElements(generateElements(fgCount, true));
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="fixed top-0 left-0 w-full h-full pointer-events-none z-[-1]"
-      style={{ backgroundColor: '#f8f9fb' }}
-    />
+    <>
+      {/* CSS KEYFRAMES INJECTED GLOBALLY FOR SMOOTH DRIFTING */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes driftA {
+          0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+          50% { transform: translate(30px, -60px) rotate(15deg) scale(1.05); }
+        }
+        @keyframes driftB {
+          0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+          50% { transform: translate(-35px, -50px) rotate(-12deg) scale(0.95); }
+        }
+        @keyframes driftC {
+          0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+          33% { transform: translate(25px, -30px) rotate(8deg) scale(1.04); }
+          66% { transform: translate(-20px, -60px) rotate(-8deg) scale(0.96); }
+        }
+        @keyframes driftD {
+          0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+          50% { transform: translate(0px, -80px) rotate(20deg) scale(1.1); }
+        }
+        .float-icon {
+          position: absolute;
+          will-change: transform;
+          animation-timing-function: ease-in-out;
+          animation-iteration-count: infinite;
+        }
+        .float-icon svg { 
+          display: block; 
+          width: 100%; 
+          height: 100%; 
+          overflow: visible; 
+        }
+        @media (prefers-reduced-motion: reduce){
+          .float-icon { animation: none !important; }
+        }
+      `}} />
+
+      {/* =========================================================================
+          LAYER 1: BACKGROUND (Behind Dashboard)
+          z-index: -1 so it sits behind everything.
+          Also provides the #f8f9fb background color for the site.
+      ========================================================================= */}
+      <div 
+        className="fixed inset-0 overflow-hidden pointer-events-none" 
+        style={{ zIndex: -1, backgroundColor: '#f8f9fb' }}
+        aria-hidden="true"
+      >
+        {bgElements.map((el) => (
+          <div
+            key={`bg-${el.id}`}
+            className="float-icon"
+            style={{
+              width: `${el.size}px`,
+              height: `${el.size}px`,
+              left: el.left,
+              top: el.top,
+              color: el.color,
+              opacity: el.opacity.toFixed(2),
+              animation: `${el.anim} ${el.dur}s ${el.delay}s infinite ease-in-out`
+            }}
+            dangerouslySetInnerHTML={{ __html: el.icon }}
+          />
+        ))}
+      </div>
+
+      {/* =========================================================================
+          LAYER 2: FOREGROUND (On Top of Dashboard)
+          z-index: 9999 so it floats ON TOP of your cards.
+          pointer-events: none ensures you can still click the buttons beneath it!
+      ========================================================================= */}
+      <div 
+        className="fixed inset-0 overflow-hidden pointer-events-none" 
+        style={{ zIndex: 9999 }}
+        aria-hidden="true"
+      >
+        {fgElements.map((el) => (
+          <div
+            key={`fg-${el.id}`}
+            className="float-icon"
+            style={{
+              width: `${el.size}px`,
+              height: `${el.size}px`,
+              left: el.left,
+              top: el.top,
+              color: el.color,
+              opacity: el.opacity.toFixed(2),
+              animation: `${el.anim} ${el.dur}s ${el.delay}s infinite ease-in-out`,
+              filter: 'drop-shadow(0px 4px 6px rgba(0,0,0,0.1))' // Adds slight shadow to top items
+            }}
+            dangerouslySetInnerHTML={{ __html: el.icon }}
+          />
+        ))}
+      </div>
+    </>
   );
 }

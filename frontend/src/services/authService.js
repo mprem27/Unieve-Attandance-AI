@@ -36,7 +36,7 @@ export const getCurrentUser = async () => {
 };
 
 // =====================================================
-// CHANGE PASSWORD
+// EXISTING CHANGE PASSWORD
 // =====================================================
 
 export const changePassword = async (
@@ -55,15 +55,64 @@ export const changePassword = async (
 };
 
 // =====================================================
-// LOGOUT
+// PASSWORD RESET - REQUEST OTP
 // =====================================================
-// Local logout is kept here so the existing working
-// authentication flow is not dependent on a backend
-// logout endpoint.
-//
-// The AuthContext also clears the session after calling
-// this function.
-//
+
+export const requestPasswordOtp = async (
+  email
+) => {
+  const response = await api.post(
+    "/auth/password/request-otp",
+    {
+      email,
+    }
+  );
+
+  return response.data;
+};
+
+// =====================================================
+// PASSWORD RESET - VERIFY OTP
+// =====================================================
+
+export const verifyPasswordOtp = async (
+  email,
+  otp
+) => {
+  const response = await api.post(
+    "/auth/password/verify-otp",
+    {
+      email,
+      otp,
+    }
+  );
+
+  return response.data;
+};
+
+// =====================================================
+// PASSWORD RESET - CHANGE PASSWORD
+// =====================================================
+
+export const changePasswordWithOtp = async (
+  email,
+  verificationToken,
+  newPassword
+) => {
+  const response = await api.post(
+    "/auth/password/change-with-otp",
+    {
+      email,
+      verificationToken,
+      newPassword,
+    }
+  );
+
+  return response.data;
+};
+
+// =====================================================
+// LOGOUT
 // =====================================================
 
 export const logoutUser = () => {

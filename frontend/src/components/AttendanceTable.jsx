@@ -15,7 +15,6 @@ const firstValue = (...values) => {
       return value;
     }
   }
-
   return "";
 };
 
@@ -80,7 +79,7 @@ const getSubjectCode = (record) => {
 };
 
 // =====================================================
-// STATUS
+// PREMIUM STATUS STYLES (Strict Brand Colors)
 // =====================================================
 
 const getRecordStatus = (record) => {
@@ -97,24 +96,19 @@ const getRecordStatus = (record) => {
 };
 
 const getStatusStyle = (status) => {
-  const normalized = String(
-    status || ""
-  )
-    .trim()
-    .toUpperCase();
+  const normalized = String(status || "").trim().toUpperCase();
 
   if (
     normalized === "P" ||
     normalized === "PRESENT" ||
     normalized === "1" ||
-    normalized === "TRUE"
+    normalized === "TRUE" ||
+    normalized.includes("PRESENT")
   ) {
     return {
       label: "Present",
-      badgeClass:
-        "border-emerald-200/60 bg-emerald-50 text-emerald-700 shadow-sm shadow-emerald-100/50",
-      dotClass:
-        "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]",
+      badgeClass: "border-[#10b981]/30 bg-[#ecfdf5] text-[#185e3a]", // Emerald border, Deep Green text
+      dotClass: "bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.5)]",
     };
   }
 
@@ -122,49 +116,23 @@ const getStatusStyle = (status) => {
     normalized === "A" ||
     normalized === "ABSENT" ||
     normalized === "0" ||
-    normalized === "FALSE"
-  ) {
-    return {
-      label: "Absent",
-      badgeClass:
-        "border-rose-200/60 bg-rose-50 text-rose-700 shadow-sm shadow-rose-100/50",
-      dotClass:
-        "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]",
-    };
-  }
-
-  if (
-    normalized.includes("PRESENT")
-  ) {
-    return {
-      label: "Present",
-      badgeClass:
-        "border-emerald-200/60 bg-emerald-50 text-emerald-700 shadow-sm",
-      dotClass: "bg-emerald-500",
-    };
-  }
-
-  if (
+    normalized === "FALSE" ||
     normalized.includes("ABSENT")
   ) {
     return {
       label: "Absent",
-      badgeClass:
-        "border-rose-200/60 bg-rose-50 text-rose-700 shadow-sm",
-      dotClass: "bg-rose-500",
+      badgeClass: "border-[#b91c1c]/20 bg-[#fef2f2] text-[#b91c1c]", // Vel Tech Red
+      dotClass: "bg-[#b91c1c] shadow-[0_0_8px_rgba(185,28,28,0.4)]",
     };
   }
 
   return {
     label:
-      status !== undefined &&
-      status !== null &&
-      String(status).trim() !== ""
+      status !== undefined && status !== null && String(status).trim() !== ""
         ? String(status)
         : "Unknown",
-    badgeClass:
-      "border-slate-200/60 bg-slate-50 text-slate-600 shadow-sm",
-    dotClass: "bg-slate-400",
+    badgeClass: "border-slate-200 bg-slate-50 text-slate-600",
+    dotClass: "bg-[#0ea5e9]", // Cyan default
   };
 };
 
@@ -184,11 +152,7 @@ const getRecordSource = (record) => {
 };
 
 const getSourceLabel = (source) => {
-  const normalized = String(
-    source || ""
-  )
-    .trim()
-    .toLowerCase();
+  const normalized = String(source || "").trim().toLowerCase();
 
   if (
     normalized === "college_portal" ||
@@ -203,13 +167,8 @@ const getSourceLabel = (source) => {
     return "Portal";
   }
 
-  if (normalized === "mock") {
-    return "Mock";
-  }
-
-  if (!source) {
-    return "Portal";
-  }
+  if (normalized === "mock") return "Mock";
+  if (!source) return "Portal";
 
   return String(source);
 };
@@ -235,26 +194,21 @@ const getRecordKey = (record, index) => {
 };
 
 // =====================================================
-// COMPONENT
+// MAIN COMPONENT
 // =====================================================
 
-export default function AttendanceTable({
-  attendance = [],
-}) {
-  const records = Array.isArray(attendance)
-    ? attendance
-    : [];
+export default function AttendanceTable({ attendance = [] }) {
+  const records = Array.isArray(attendance) ? attendance : [];
 
   // ===================================================
   // EMPTY STATE
   // ===================================================
-
   if (!records.length) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-8 text-center transition-colors hover:bg-slate-50 sm:rounded-3xl sm:p-12">
-        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-900/5 sm:mb-4 sm:h-16 sm:w-16 sm:rounded-2xl">
+      <div className="flex flex-col items-center justify-center rounded-[32px] border-2 border-dashed border-[#1e3a8a]/20 bg-slate-50/50 p-10 text-center transition-colors hover:bg-slate-50 sm:p-16">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#0ea5e9]/10 text-[#0ea5e9] shadow-inner shadow-[#0ea5e9]/20 sm:h-20 sm:w-20">
           <svg
-            className="h-6 w-6 text-slate-400 sm:h-8 sm:w-8"
+            className="h-8 w-8 sm:h-10 sm:w-10"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -267,49 +221,51 @@ export default function AttendanceTable({
             />
           </svg>
         </div>
-
-        <h3 className="text-base font-bold text-slate-900 sm:text-lg">
+        <h3 className="text-xl font-black text-[#1e3a8a] sm:text-2xl">
           No Attendance Records
         </h3>
-
-        <p className="mt-1.5 max-w-[280px] text-xs text-slate-500 sm:mt-2 sm:max-w-sm sm:text-sm">
-          We haven't synced any attendance data
-          for you yet. Records will appear here
-          automatically once fetched.
+        <p className="mt-2 max-w-sm text-sm font-medium text-slate-500">
+          We haven't synced any attendance data for you yet. Records will appear here automatically once fetched from the portal.
         </p>
       </div>
     );
   }
 
   // ===================================================
-  // TABLE
+  // TABLE & LIST VIEW
   // ===================================================
-
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:rounded-3xl">
+    <div className="relative overflow-hidden rounded-[32px] border border-slate-200/80 bg-white shadow-xl shadow-slate-200/40">
+      
+      {/* ANIMATION STYLES */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-up {
+          animation: fadeUp 0.4s ease-out forwards;
+        }
+      `}} />
+
+      {/* TOP ACCENT LINE (Navy to Cyan) */}
+      <div className="absolute left-0 top-0 h-1.5 w-full bg-gradient-to-r from-[#1e3a8a] via-[#0ea5e9] to-[#1e3a8a]" />
 
       {/* HEADER */}
-
-      <div className="border-b border-slate-100 bg-white p-5 sm:px-8 sm:py-6">
+      <div className="border-b border-slate-100 bg-white p-6 sm:px-8 sm:py-7 pt-8">
         <div className="flex items-start justify-between gap-4 sm:items-center">
           <div className="min-w-0">
-            <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
+            <h2 className="text-2xl font-black tracking-tight text-[#1e3a8a]">
               Attendance Log
             </h2>
-
-            <p className="mt-0.5 text-xs font-medium text-slate-500 sm:mt-1 sm:text-sm">
-              Attendance synchronized from the
-              college parent portal
+            <p className="mt-1 text-xs font-medium text-slate-500 sm:text-sm">
+              Comprehensive timeline of your class participation.
             </p>
           </div>
 
-          <div className="flex shrink-0 items-center justify-center rounded-full bg-slate-100 px-2.5 py-1 sm:px-3 sm:py-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 sm:text-xs">
-              {records.length}
-              <span className="hidden sm:inline">
-                {" "}
-                Records
-              </span>
+          <div className="flex shrink-0 items-center justify-center rounded-full bg-[#1e3a8a]/5 px-3 py-1.5 border border-[#1e3a8a]/10">
+            <span className="text-[10px] font-black uppercase tracking-widest text-[#1e3a8a] sm:text-xs">
+              {records.length} <span className="hidden sm:inline">Records</span>
             </span>
           </div>
         </div>
@@ -318,252 +274,132 @@ export default function AttendanceTable({
       {/* =================================================
           DESKTOP TABLE
       ================================================= */}
-
       <div className="hidden w-full overflow-x-auto md:block">
         <table className="w-full text-left">
-          <thead className="bg-slate-50/80 backdrop-blur-sm">
+          <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 lg:px-8">
-                Date
-              </th>
-
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 lg:px-8">
-                Subject
-              </th>
-
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 lg:px-8">
-                Code
-              </th>
-
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 lg:px-8">
-                Status
-              </th>
-
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 lg:px-8">
-                Source
-              </th>
+              <th className="px-8 py-5 text-[11px] font-black uppercase tracking-widest text-slate-400">Date</th>
+              <th className="px-8 py-5 text-[11px] font-black uppercase tracking-widest text-slate-400">Subject</th>
+              <th className="px-8 py-5 text-[11px] font-black uppercase tracking-widest text-slate-400">Code</th>
+              <th className="px-8 py-5 text-[11px] font-black uppercase tracking-widest text-slate-400">Status</th>
+              <th className="px-8 py-5 text-[11px] font-black uppercase tracking-widest text-slate-400">Source</th>
             </tr>
           </thead>
+          <tbody className="divide-y divide-slate-100/80">
+            {records.map((record, index) => {
+              const status = getStatusStyle(getRecordStatus(record));
+              const source = getSourceLabel(getRecordSource(record));
+              const subjectName = getSubjectName(record);
+              const subjectCode = getSubjectCode(record);
+              const recordDate = getRecordDate(record);
 
-          <tbody className="divide-y divide-slate-100">
-            {records.map(
-              (record, index) => {
-                const rawStatus =
-                  getRecordStatus(record);
+              return (
+                <tr
+                  key={getRecordKey(record, index)}
+                  className="group transition-colors hover:bg-slate-50/60 opacity-0 animate-fade-up"
+                  style={{ animationDelay: `${Math.min(index * 30, 800)}ms` }}
+                >
+                  {/* DATE */}
+                  <td className="whitespace-nowrap px-8 py-5 text-sm font-bold text-slate-600">
+                    {recordDate ? formatDate(recordDate) : "—"}
+                  </td>
 
-                const status =
-                  getStatusStyle(
-                    rawStatus
-                  );
+                  {/* SUBJECT */}
+                  <td className="px-8 py-5">
+                    <p className="font-black text-[#1e3a8a] transition-colors group-hover:text-[#0ea5e9]">
+                      {subjectName}
+                    </p>
+                  </td>
 
-                const source =
-                  getRecordSource(
-                    record
-                  );
+                  {/* CODE */}
+                  <td className="whitespace-nowrap px-8 py-5 text-xs font-bold tracking-wider text-slate-400 uppercase">
+                    {subjectCode}
+                  </td>
 
-                const subjectName =
-                  getSubjectName(
-                    record
-                  );
+                  {/* STATUS */}
+                  <td className="px-8 py-5">
+                    <span className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${status.badgeClass}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${status.dotClass}`} />
+                      {status.label}
+                    </span>
+                  </td>
 
-                const subjectCode =
-                  getSubjectCode(
-                    record
-                  );
-
-                const recordDate =
-                  getRecordDate(
-                    record
-                  );
-
-                return (
-                  <tr
-                    key={getRecordKey(
-                      record,
-                      index
-                    )}
-                    className="group transition-colors hover:bg-slate-50/80"
-                  >
-                    {/* DATE */}
-
-                    <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-slate-700 lg:px-8 lg:py-5">
-                      {recordDate
-                        ? formatDate(
-                            recordDate
-                          )
-                        : "—"}
-                    </td>
-
-                    {/* SUBJECT */}
-
-                    <td className="px-6 py-4 lg:px-8 lg:py-5">
-                      <p className="font-bold text-slate-900 transition-colors group-hover:text-blue-600">
-                        {subjectName}
-                      </p>
-                    </td>
-
-                    {/* CODE */}
-
-                    <td className="whitespace-nowrap px-6 py-4 text-xs font-medium text-slate-400 lg:px-8 lg:py-5 lg:text-sm">
-                      {subjectCode}
-                    </td>
-
-                    {/* STATUS */}
-
-                    <td className="px-6 py-4 lg:px-8 lg:py-5">
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide lg:text-xs ${status.badgeClass}`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${status.dotClass}`}
-                        />
-
-                        {status.label}
-                      </span>
-                    </td>
-
-                    {/* SOURCE */}
-
-                    <td className="px-6 py-4 text-xs font-medium text-slate-500 lg:px-8 lg:py-5 lg:text-sm">
-                      <div className="flex items-center gap-1.5">
-                        <svg
-                          className="h-4 w-4 text-slate-400"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z"
-                          />
-                        </svg>
-
-                        {getSourceLabel(
-                          source
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              }
-            )}
+                  {/* SOURCE */}
+                  <td className="px-8 py-5 text-xs font-bold text-slate-400 uppercase tracking-wide">
+                    <div className="flex items-center gap-2">
+                      <svg className="h-4 w-4 text-[#0ea5e9]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
+                      </svg>
+                      {source}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {/* =================================================
-          MOBILE
+          MOBILE LIST CARDS
       ================================================= */}
+      <div className="md:hidden flex flex-col gap-3 p-4 bg-slate-50/50">
+        {records.map((record, index) => {
+          const status = getStatusStyle(getRecordStatus(record));
+          const source = getSourceLabel(getRecordSource(record));
+          const subjectName = getSubjectName(record);
+          const subjectCode = getSubjectCode(record);
+          const recordDate = getRecordDate(record);
 
-      <div className="divide-y divide-slate-100 md:hidden">
-        {records.map(
-          (record, index) => {
-            const rawStatus =
-              getRecordStatus(
-                record
-              );
+          return (
+            <div
+              key={getRecordKey(record, index)}
+              className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm opacity-0 animate-fade-up"
+              style={{ animationDelay: `${Math.min(index * 40, 800)}ms` }}
+            >
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-black leading-snug text-[#1e3a8a]">
+                    {subjectName}
+                  </p>
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    {subjectCode || "N/A"}
+                  </p>
+                </div>
+                <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${status.badgeClass}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${status.dotClass}`} />
+                  {status.label}
+                </span>
+              </div>
 
-            const status =
-              getStatusStyle(
-                rawStatus
-              );
-
-            const source =
-              getSourceLabel(
-                getRecordSource(
-                  record
-                )
-              );
-
-            const subjectName =
-              getSubjectName(
-                record
-              );
-
-            const subjectCode =
-              getSubjectCode(
-                record
-              );
-
-            const recordDate =
-              getRecordDate(
-                record
-              );
-
-            return (
-              <div
-                key={getRecordKey(
-                  record,
-                  index
-                )}
-                className="bg-white p-4 transition-colors hover:bg-slate-50/50 sm:p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold leading-snug text-slate-900 sm:text-base">
-                      {subjectName}
-                    </p>
-
-                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:mt-1 sm:text-xs">
-                      {subjectCode}
-                    </p>
-                  </div>
-
-                  <span
-                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider sm:px-2.5 sm:py-1 sm:text-[10px] ${status.badgeClass}`}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${status.dotClass}`}
-                    />
-
-                    {status.label}
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3 border border-slate-100">
+                <div className="flex min-w-0 flex-col">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                    Date
+                  </span>
+                  <span className="mt-0.5 text-xs font-bold text-slate-700">
+                    {recordDate ? formatDate(recordDate) : "—"}
                   </span>
                 </div>
-
-                <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-2.5 sm:mt-5 sm:p-3">
-                  <div className="flex min-w-0 flex-col">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 sm:text-[10px]">
-                      Date
-                    </span>
-
-                    <span className="mt-0.5 text-xs font-semibold text-slate-700 sm:text-sm">
-                      {recordDate
-                        ? formatDate(
-                            recordDate
-                          )
-                        : "—"}
-                    </span>
-                  </div>
-
-                  <div className="h-6 w-px bg-slate-200 sm:h-8" />
-
-                  <div className="flex min-w-0 flex-col text-right">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 sm:text-[10px]">
-                      Source
-                    </span>
-
-                    <span className="mt-0.5 text-xs font-semibold text-slate-700 sm:text-sm">
-                      {source}
-                    </span>
-                  </div>
+                <div className="h-6 w-px bg-slate-200" />
+                <div className="flex min-w-0 flex-col text-right">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                    Source
+                  </span>
+                  <span className="mt-0.5 text-xs font-bold text-[#0ea5e9]">
+                    {source}
+                  </span>
                 </div>
               </div>
-            );
-          }
-        )}
+            </div>
+          );
+        })}
       </div>
 
       {/* FOOTER */}
-
-      <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-3 sm:px-8 sm:py-4">
-        <p className="text-[11px] font-medium text-slate-500 sm:text-sm">
-          Showing{" "}
-          <span className="font-bold text-slate-900">
-            {records.length}
-          </span>{" "}
-          attendance records
+      <div className="border-t border-slate-100 bg-white px-6 py-4 sm:px-8 sm:py-5 flex justify-center sm:justify-start">
+        <p className="text-xs font-medium text-slate-500">
+          Showing <span className="font-black text-[#1e3a8a]">{records.length}</span> attendance records.
         </p>
       </div>
     </div>

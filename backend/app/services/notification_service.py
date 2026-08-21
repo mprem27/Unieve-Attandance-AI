@@ -6,19 +6,32 @@ from app.models.notification import NOTIFICATIONS
 from app.models.user import USERS
 from app.services.base import serialize_document
 from app.services.sms_service import SMSService
+from app.services.email_service import EmailService
 from app.utils.dates import utc_now
 
 
 class NotificationService:
     """
-    Handles in-app notifications and their SMS status.
+    Handles in-app notifications, email notifications,
+    and SMS status.
 
     Attendance data itself is not modified here.
     """
 
     def __init__(self, db: Database):
         self.db = db
+
+        # =================================================
+        # EXISTING SMS SERVICE
+        # =================================================
+
         self.sms_service = SMSService(db)
+
+        # =================================================
+        # EMAIL SERVICE
+        # =================================================
+
+        self.email_service = EmailService(db)
 
     # =====================================================
     # LIST STUDENT NOTIFICATIONS
@@ -28,6 +41,7 @@ class NotificationService:
         self,
         student_id: str,
     ) -> list[dict]:
+
         cursor = (
             self.db[NOTIFICATIONS]
             .find(
@@ -54,6 +68,7 @@ class NotificationService:
     def list_all_notifications(
         self,
     ) -> list[dict]:
+
         cursor = (
             self.db[NOTIFICATIONS]
             .find()
@@ -77,6 +92,7 @@ class NotificationService:
         self,
         student_id: str,
     ) -> int:
+
         return self.db[
             NOTIFICATIONS
         ].count_documents(
@@ -95,10 +111,12 @@ class NotificationService:
         notification_id: str,
         student_id: str,
     ) -> dict:
+
         try:
             object_id = ObjectId(
                 notification_id
             )
+
         except Exception as exc:
             raise HTTPException(
                 status_code=400,
@@ -139,6 +157,7 @@ class NotificationService:
         self,
         student_id: str,
     ) -> int:
+
         result = self.db[
             NOTIFICATIONS
         ].update_many(
@@ -165,10 +184,12 @@ class NotificationService:
         notification_id: str,
         student_id: str,
     ) -> bool:
+
         try:
             object_id = ObjectId(
                 notification_id
             )
+
         except Exception as exc:
             raise HTTPException(
                 status_code=400,
@@ -204,9 +225,14 @@ class NotificationService:
         """
         Create an attendance notification.
 
-        SMS is sent only for a new ABSENT event.
+        Existing notification and SMS behaviour is preserved.
 
-        Existing attendance logic is not modified here.
+        For a new ABSENT event:
+            1. Create in-app notification.
+            2. Attempt email notification.
+            3. Attempt SMS according to existing SMS configuration.
+
+        Attendance data itself is not modified here.
         """
 
         normalized_new_status = (
@@ -226,6 +252,7 @@ class NotificationService:
         # =================================================
 
         if normalized_new_status == "ABSENT":
+
             notification_type = (
                 "ATTENDANCE_ABSENT"
             )
@@ -240,6 +267,7 @@ class NotificationService:
             priority = "HIGH"
 
         else:
+
             notification_type = (
                 "ATTENDANCE_CORRECTED"
             )
@@ -293,6 +321,7 @@ class NotificationService:
             student_object_id = ObjectId(
                 student_id
             )
+
         except Exception as exc:
             raise HTTPException(
                 status_code=400,
@@ -319,73 +348,186 @@ class NotificationService:
         sms_sent_at = None
 
         # =================================================
-        # SEND SMS ONLY FOR ABSENCE
+        # EMAIL DEFAULT
+        # =================================================
+
+        email_status = "NOT_REQUIRED"
+        email_message_id = None
+        email_error = None
+        email_sent_at = None
+
+        # =================================================
+        # ABSENT EVENT
         # =================================================
 
         if (
             student
-            and student.get(
-                "smsEnabled",
-                True,
-            )
-            and student.get(
-                "phoneNumber"
-            )
-            and normalized_new_status
-            == "ABSENT"
+            and normalized_new_status == "ABSENT"
         ):
-            sms_phone = str(
+
+            # =================================================
+            # EMAIL NOTIFICATION
+            # =================================================
+
+            email_address = (
+                student.get("email")
+            )
+
+            if (
+                email_address
+                and student.get(
+                    "notificationsEnabled",
+                    True,
+                )
+            ):
+                try:
+
+                    email_result = (
+                        self.email_service.send_attendance_email(
+                            student_id=student_id,
+                            email_address=str(
+                                email_address
+                            ).strip(),
+                            student_name=str(
+                                student.get(
+                                    "name",
+                                    "Student",
+                                )
+                            ).strip(),
+                            subject_name=subject_name,
+                            subject_code=subject_code,
+                            date=date,
+                            message=message,
+                            attendance_percentage=(
+                                attendance_percentage
+                            ),
+                        )
+                    )
+
+                    if isinstance(
+                        email_result,
+                        dict,
+                    ):
+
+                        email_status = (
+                            email_result.get(
+                                "status",
+                                "FAILED",
+                            )
+                        )
+
+                        email_message_id = (
+                            email_result.get(
+                                "messageId"
+                            )
+                        )
+
+                        email_error = (
+                            email_result.get(
+                                "error"
+                            )
+                        )
+
+                        email_sent_at = (
+                            email_result.get(
+                                "sentAt"
+                            )
+                        )
+
+                    else:
+
+                        email_status = str(
+                            email_result
+                        )
+
+                except Exception as exc:
+
+                    # Email failure must NOT break
+                    # attendance notification creation.
+
+                    email_status = "FAILED"
+                    email_error = str(exc)
+
+            elif not email_address:
+
+                email_status = (
+                    "SKIPPED_NO_EMAIL"
+                )
+
+            else:
+
+                email_status = "DISABLED"
+
+            # =================================================
+            # EXISTING SMS LOGIC
+            # =================================================
+
+            if (
                 student.get(
+                    "smsEnabled",
+                    True,
+                )
+                and student.get(
                     "phoneNumber"
                 )
-            ).strip()
+            ):
 
-            try:
-                sms_result = (
-                    self.sms_service.send_sms(
-                        student_id=student_id,
-                        phone_number=sms_phone,
-                        message=message,
+                sms_phone = str(
+                    student.get(
+                        "phoneNumber"
                     )
-                )
+                ).strip()
 
-                if isinstance(
-                    sms_result,
-                    dict,
-                ):
-                    sms_status = (
-                        sms_result.get(
-                            "status",
-                            "FAILED",
+                try:
+
+                    sms_result = (
+                        self.sms_service.send_sms(
+                            student_id=student_id,
+                            phone_number=sms_phone,
+                            message=message,
                         )
                     )
 
-                    sms_message_id = (
-                        sms_result.get(
-                            "messageId"
+                    if isinstance(
+                        sms_result,
+                        dict,
+                    ):
+
+                        sms_status = (
+                            sms_result.get(
+                                "status",
+                                "FAILED",
+                            )
                         )
-                    )
 
-                    sms_error = (
-                        sms_result.get(
-                            "error"
+                        sms_message_id = (
+                            sms_result.get(
+                                "messageId"
+                            )
                         )
-                    )
 
-                    sms_sent_at = (
-                        sms_result.get(
-                            "sentAt"
+                        sms_error = (
+                            sms_result.get(
+                                "error"
+                            )
                         )
-                    )
 
-                else:
-                    sms_status = str(
-                        sms_result
-                    )
+                        sms_sent_at = (
+                            sms_result.get(
+                                "sentAt"
+                            )
+                        )
 
-            except Exception as exc:
-                sms_status = "FAILED"
-                sms_error = str(exc)
+                    else:
+
+                        sms_status = str(
+                            sms_result
+                        )
+
+                except Exception as exc:
+
+                    sms_status = "FAILED"
+                    sms_error = str(exc)
 
         # =================================================
         # CREATE DOCUMENT
@@ -422,6 +564,24 @@ class NotificationService:
 
             "read": False,
 
+            # =================================================
+            # EMAIL
+            # =================================================
+
+            "emailStatus": email_status,
+
+            "emailMessageId": (
+                email_message_id
+            ),
+
+            "emailError": email_error,
+
+            "emailSentAt": email_sent_at,
+
+            # =================================================
+            # SMS
+            # =================================================
+
             "smsStatus": sms_status,
 
             "smsMessageId": sms_message_id,
@@ -431,6 +591,10 @@ class NotificationService:
             "smsError": sms_error,
 
             "smsSentAt": sms_sent_at,
+
+            # =================================================
+            # EVENT
+            # =================================================
 
             "eventKey": event_key,
 

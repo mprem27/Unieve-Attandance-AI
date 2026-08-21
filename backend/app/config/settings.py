@@ -44,26 +44,6 @@ class Settings(BaseSettings):
     # -----------------------------------------------------
     # LOGIN SESSION
     # -----------------------------------------------------
-    #
-    # 43,200 minutes = 30 days
-    #
-    # This works with the existing frontend architecture:
-    #
-    # Login
-    #   ↓
-    # JWT
-    #   ↓
-    # localStorage
-    #   ↓
-    # Browser reopened
-    #   ↓
-    # JWT still valid
-    #   ↓
-    # User remains logged in
-    #
-    # Logout still removes the token immediately.
-    #
-    # -----------------------------------------------------
 
     access_token_expire_minutes: int = 43200
 
@@ -99,9 +79,6 @@ class Settings(BaseSettings):
     # =====================================================
     # ADAPTER MODE
     # =====================================================
-
-    # mock   = development/testing
-    # portal = actual Vel Tech portal
 
     college_adapter_mode: str = "mock"
 
@@ -286,6 +263,38 @@ class Settings(BaseSettings):
     attendance_critical_notifications: bool = True
 
     # =====================================================
+    # EMAIL NOTIFICATIONS
+    # =====================================================
+    #
+    # Added for:
+    #
+    # 1. Attendance absent emails
+    # 2. Password OTP emails
+    #
+    # Existing notification/SMS settings are untouched.
+    # =====================================================
+
+    email_enabled: bool = False
+
+    email_host: str = "smtp.gmail.com"
+
+    email_port: int = 587
+
+    email_username: str = ""
+
+    email_password: str = ""
+
+    email_from: str = ""
+
+    email_from_name: str = (
+        "Smart Attendance System"
+    )
+
+    email_use_tls: bool = True
+
+    email_attendance_alerts: bool = True
+
+    # =====================================================
     # FILE / PHOTO STORAGE
     # =====================================================
 
@@ -437,9 +446,9 @@ class Settings(BaseSettings):
         return value
 
 
-# =====================================================
+# =========================================================
 # SETTINGS SINGLETON
-# =====================================================
+# =========================================================
 
 @lru_cache
 def get_settings() -> Settings:

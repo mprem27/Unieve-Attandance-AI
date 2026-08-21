@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
+
 from bson import ObjectId
 from fastapi import HTTPException, status
 from pymongo.database import Database
@@ -15,16 +19,26 @@ from app.services.base import (
     public_user,
     serialize_document,
 )
+from app.services.email_service import EmailService
+from app.utils.dates import utc_now
 from app.utils.validators import require_student_role
 
 
 class AuthService:
+
+    PASSWORD_CHANGE_INTERVAL_DAYS = 30
 
     def __init__(
         self,
         db: Database,
     ):
         self.db = db
+
+        # =====================================================
+        # EMAIL SERVICE
+        # =====================================================
+
+        self.email_service = EmailService(db)
 
     # =========================================================
     # LOGIN
@@ -97,10 +111,6 @@ class AuthService:
         payload: UserCreate,
     ) -> dict:
 
-        # -----------------------------------------------------
-        # Admin can create student accounts only
-        # -----------------------------------------------------
-
         require_student_role(
             payload.role
         )
@@ -166,7 +176,6 @@ class AuthService:
             )
 
             if existing_vtu:
-
                 raise HTTPException(
                     status_code=409,
                     detail="VTU number already exists",
@@ -174,23 +183,6 @@ class AuthService:
 
         # =====================================================
         # PORTAL CREDENTIALS
-        # =====================================================
-        #
-        # IMPORTANT:
-        #
-        # portalUsername:
-        #     Parent/college portal login username.
-        #
-        # vtuNumber:
-        #     Student/college roll number.
-        #
-        # Example:
-        #
-        #     portalUsername = VTU26381
-        #     vtuNumber      = 23UECS1122
-        #
-        # NEVER store portalPassword as plain text.
-        #
         # =====================================================
 
         portal_password_encrypted = None
@@ -239,6 +231,7 @@ class AuthService:
         # =====================================================
 
         user = {
+
             # -------------------------------------------------
             # BASIC INFORMATION
             # -------------------------------------------------
@@ -343,9 +336,7 @@ class AuthService:
             # NOTIFICATIONS
             # -------------------------------------------------
 
-            "smsEnabled": (
-                payload.smsEnabled
-            ),
+            "smsEnabled": payload.smsEnabled,
 
             "notificationsEnabled": (
                 payload.notificationsEnabled
@@ -358,6 +349,24 @@ class AuthService:
             "active": payload.active,
 
             "forcePasswordChange": True,
+
+            # =================================================
+            # PASSWORD CHANGE TRACKING
+            # =================================================
+
+            "passwordLastChangedAt": None,
+
+            "passwordOtpHash": None,
+
+            "passwordOtpExpiresAt": None,
+
+            "passwordOtpAttempts": 0,
+
+            "passwordOtpRequestedAt": None,
+
+            "passwordOtpVerifiedHash": None,
+
+            "passwordOtpVerifiedExpiresAt": None,
 
             # -------------------------------------------------
             # PORTAL SYNC
@@ -384,9 +393,7 @@ class AuthService:
             user
         )
 
-        user["_id"] = (
-            result.inserted_id
-        )
+        user["_id"] = result.inserted_id
 
         # =====================================================
         # VERIFY INSERTED DOCUMENT
@@ -454,28 +461,21 @@ class AuthService:
             print(
                 "========================================"
             )
+            print("STUDENT CREATED")
             print(
-                "STUDENT CREATED"
+                f"Student ID: {result.inserted_id}"
             )
             print(
-                f"Student ID: "
-                f"{result.inserted_id}"
+                f"Name: {saved_user.get('name')}"
             )
             print(
-                f"Name: "
-                f"{saved_user.get('name')}"
+                f"Email: {saved_user.get('email')}"
             )
             print(
-                f"Email: "
-                f"{saved_user.get('email')}"
+                f"Portal Username: {saved_portal_username}"
             )
             print(
-                f"Portal Username: "
-                f"{saved_portal_username}"
-            )
-            print(
-                f"VTU Number: "
-                f"{saved_user.get('vtuNumber')}"
+                f"VTU Number: {saved_user.get('vtuNumber')}"
             )
             print(
                 "Portal Password: ENCRYPTED"
@@ -494,27 +494,21 @@ class AuthService:
             print(
                 "========================================"
             )
+            print("STUDENT CREATED")
             print(
-                "STUDENT CREATED"
+                f"Student ID: {result.inserted_id}"
             )
             print(
-                f"Student ID: "
-                f"{result.inserted_id}"
+                f"Name: {saved_user.get('name')}"
             )
             print(
-                f"Name: "
-                f"{saved_user.get('name')}"
-            )
-            print(
-                f"Email: "
-                f"{saved_user.get('email')}"
+                f"Email: {saved_user.get('email')}"
             )
             print(
                 "Portal Username: NOT PROVIDED"
             )
             print(
-                f"VTU Number: "
-                f"{saved_user.get('vtuNumber')}"
+                f"VTU Number: {saved_user.get('vtuNumber')}"
             )
             print(
                 "Portal Credentials Configured: FALSE"
@@ -535,7 +529,7 @@ class AuthService:
         )
 
     # =========================================================
-    # CHANGE PASSWORD
+    # EXISTING CHANGE PASSWORD
     # =========================================================
 
     def change_password(
@@ -586,6 +580,16 @@ class AuthService:
                 detail="Current password is incorrect",
             )
 
+        # =====================================================
+        # 30-DAY RESTRICTION
+        # =====================================================
+
+        self._check_monthly_password_limit(
+            user
+        )
+
+        now = utc_now()
+
         self.db[
             USERS
         ].update_one(
@@ -598,7 +602,483 @@ class AuthService:
                         new_password
                     ),
                     "forcePasswordChange": False,
+                    "passwordLastChangedAt": now,
                 }
+            },
+        )
+
+    # =========================================================
+    # REQUEST PASSWORD OTP
+    # =========================================================
+
+    def request_password_change_otp(
+        self,
+        email: str,
+    ) -> dict:
+
+        normalized_email = (
+            email.strip().lower()
+        )
+
+        user = self.db[
+            USERS
+        ].find_one(
+            {
+                "email": normalized_email,
+                "active": True,
+                "role": "student",
+            }
+        )
+
+        # -----------------------------------------------------
+        # Do not reveal whether an email exists.
+        # -----------------------------------------------------
+
+        if not user:
+
+            return {
+                "success": True,
+                "message": (
+                    "If an active student account "
+                    "exists for this email, an OTP "
+                    "will be sent."
+                ),
+            }
+
+        # =====================================================
+        # 30-DAY RESTRICTION
+        # =====================================================
+
+        self._check_monthly_password_limit(
+            user
+        )
+
+        # =====================================================
+        # GENERATE OTP
+        # =====================================================
+
+        otp = f"{secrets.randbelow(1000000):06d}"
+
+        otp_hash = self._hash_otp(
+            otp
+        )
+
+        now = utc_now()
+
+        expires_at = (
+            now + timedelta(minutes=10)
+        )
+
+        # =====================================================
+        # SAVE OTP
+        # =====================================================
+
+        self.db[
+            USERS
+        ].update_one(
+            {
+                "_id": user["_id"],
+            },
+            {
+                "$set": {
+                    "passwordOtpHash": otp_hash,
+                    "passwordOtpExpiresAt": expires_at,
+                    "passwordOtpAttempts": 0,
+                    "passwordOtpRequestedAt": now,
+                },
+            },
+        )
+
+        # =====================================================
+        # SEND OTP EMAIL
+        # =====================================================
+
+        try:
+
+            result = (
+                self.email_service.send_password_otp(
+                    student_id=str(
+                        user["_id"]
+                    ),
+                    email_address=user.get(
+                        "email"
+                    ),
+                    student_name=user.get(
+                        "name",
+                        "Student",
+                    ),
+                    otp=otp,
+                )
+            )
+
+        except Exception as exc:
+
+            self.db[
+                USERS
+            ].update_one(
+                {
+                    "_id": user["_id"],
+                },
+                {
+                    "$unset": {
+                        "passwordOtpHash": "",
+                        "passwordOtpExpiresAt": "",
+                        "passwordOtpRequestedAt": "",
+                    },
+                    "$set": {
+                        "passwordOtpAttempts": 0,
+                    },
+                },
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Unable to send password OTP."
+                ),
+            ) from exc
+
+        if (
+            not isinstance(
+                result,
+                dict,
+            )
+            or result.get("status")
+            != "SENT"
+        ):
+
+            self.db[
+                USERS
+            ].update_one(
+                {
+                    "_id": user["_id"],
+                },
+                {
+                    "$unset": {
+                        "passwordOtpHash": "",
+                        "passwordOtpExpiresAt": "",
+                        "passwordOtpRequestedAt": "",
+                    },
+                    "$set": {
+                        "passwordOtpAttempts": 0,
+                    },
+                },
+            )
+
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Password OTP could not be sent."
+                ),
+            )
+
+        return {
+            "success": True,
+            "message": (
+                "Password OTP has been sent "
+                "to your registered email."
+            ),
+        }
+
+    # =========================================================
+    # VERIFY PASSWORD OTP
+    # =========================================================
+
+    def verify_password_change_otp(
+        self,
+        email: str,
+        otp: str,
+    ) -> dict:
+
+        normalized_email = (
+            email.strip().lower()
+        )
+
+        clean_otp = (
+            str(otp).strip()
+        )
+
+        user = self.db[
+            USERS
+        ].find_one(
+            {
+                "email": normalized_email,
+                "active": True,
+                "role": "student",
+            }
+        )
+
+        if not user:
+
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid OTP.",
+            )
+
+        otp_hash = user.get(
+            "passwordOtpHash"
+        )
+
+        expires_at = user.get(
+            "passwordOtpExpiresAt"
+        )
+
+        attempts = int(
+            user.get(
+                "passwordOtpAttempts",
+                0,
+            )
+            or 0
+        )
+
+        if not otp_hash or not expires_at:
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "OTP is invalid or has expired."
+                ),
+            )
+
+        if attempts >= 5:
+
+            self._clear_password_otp(
+                user["_id"]
+            )
+
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Too many incorrect OTP attempts. "
+                    "Please request a new OTP."
+                ),
+            )
+
+        now = utc_now()
+
+        expires_at = self._as_utc_datetime(
+            expires_at
+        )
+
+        if now >= expires_at:
+
+            self._clear_password_otp(
+                user["_id"]
+            )
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "OTP has expired. "
+                    "Please request a new OTP."
+                ),
+            )
+
+        submitted_hash = self._hash_otp(
+            clean_otp
+        )
+
+        if not secrets.compare_digest(
+            submitted_hash,
+            otp_hash,
+        ):
+
+            self.db[
+                USERS
+            ].update_one(
+                {
+                    "_id": user["_id"],
+                },
+                {
+                    "$inc": {
+                        "passwordOtpAttempts": 1,
+                    }
+                },
+            )
+
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid OTP.",
+            )
+
+        # =====================================================
+        # OTP VERIFIED
+        # =====================================================
+
+        verification_token = (
+            secrets.token_urlsafe(32)
+        )
+
+        verification_hash = (
+            self._hash_otp(
+                verification_token
+            )
+        )
+
+        verification_expires_at = (
+            now + timedelta(minutes=10)
+        )
+
+        self.db[
+            USERS
+        ].update_one(
+            {
+                "_id": user["_id"],
+            },
+            {
+                "$set": {
+                    "passwordOtpVerifiedHash": (
+                        verification_hash
+                    ),
+                    "passwordOtpVerifiedExpiresAt": (
+                        verification_expires_at
+                    ),
+                },
+                "$unset": {
+                    "passwordOtpHash": "",
+                    "passwordOtpExpiresAt": "",
+                },
+            },
+        )
+
+        return {
+            "success": True,
+            "message": (
+                "OTP verified successfully."
+            ),
+            "verificationToken": (
+                verification_token
+            ),
+        }
+
+    # =========================================================
+    # CHANGE PASSWORD USING VERIFIED OTP
+    # =========================================================
+
+    def change_password_with_otp(
+        self,
+        email: str,
+        verification_token: str,
+        new_password: str,
+    ) -> None:
+
+        normalized_email = (
+            email.strip().lower()
+        )
+
+        user = self.db[
+            USERS
+        ].find_one(
+            {
+                "email": normalized_email,
+                "active": True,
+                "role": "student",
+            }
+        )
+
+        if not user:
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid password reset request."
+                ),
+            )
+
+        # =====================================================
+        # 30-DAY RESTRICTION
+        # =====================================================
+
+        self._check_monthly_password_limit(
+            user
+        )
+
+        # =====================================================
+        # VERIFY TOKEN
+        # =====================================================
+
+        stored_hash = user.get(
+            "passwordOtpVerifiedHash"
+        )
+
+        expires_at = user.get(
+            "passwordOtpVerifiedExpiresAt"
+        )
+
+        if (
+            not stored_hash
+            or not expires_at
+        ):
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Password change verification "
+                    "is invalid or expired."
+                ),
+            )
+
+        now = utc_now()
+
+        expires_at = self._as_utc_datetime(
+            expires_at
+        )
+
+        if now >= expires_at:
+
+            self._clear_password_verification(
+                user["_id"]
+            )
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Password change verification "
+                    "has expired."
+                ),
+            )
+
+        submitted_hash = self._hash_otp(
+            verification_token
+        )
+
+        if not secrets.compare_digest(
+            submitted_hash,
+            stored_hash,
+        ):
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid password change verification."
+                ),
+            )
+
+        # =====================================================
+        # CHANGE PASSWORD
+        # =====================================================
+
+        self.db[
+            USERS
+        ].update_one(
+            {
+                "_id": user["_id"],
+            },
+            {
+                "$set": {
+                    "passwordHash": hash_password(
+                        new_password
+                    ),
+                    "forcePasswordChange": False,
+                    "passwordLastChangedAt": now,
+                },
+                "$unset": {
+                    "passwordOtpVerifiedHash": "",
+                    "passwordOtpVerifiedExpiresAt": "",
+                    "passwordOtpHash": "",
+                    "passwordOtpExpiresAt": "",
+                    "passwordOtpRequestedAt": "",
+                },
             },
         )
 
@@ -643,7 +1123,14 @@ class AuthService:
                         new_password
                     ),
                     "forcePasswordChange": True,
-                }
+                },
+                "$unset": {
+                    "passwordOtpHash": "",
+                    "passwordOtpExpiresAt": "",
+                    "passwordOtpRequestedAt": "",
+                    "passwordOtpVerifiedHash": "",
+                    "passwordOtpVerifiedExpiresAt": "",
+                },
             },
         )
 
@@ -676,9 +1163,7 @@ class AuthService:
                 "name": name.strip(),
 
                 "email": (
-                    email
-                    .strip()
-                    .lower()
+                    email.strip().lower()
                 ),
 
                 "passwordHash": hash_password(
@@ -721,12 +1206,318 @@ class AuthService:
 
                 "forcePasswordChange": False,
 
+                # Password tracking
+                "passwordLastChangedAt": None,
+
+                "passwordOtpHash": None,
+
+                "passwordOtpExpiresAt": None,
+
+                "passwordOtpAttempts": 0,
+
+                "passwordOtpRequestedAt": None,
+
+                "passwordOtpVerifiedHash": None,
+
+                "passwordOtpVerifiedExpiresAt": None,
+
                 "portalSynced": False,
 
                 "lastSyncedAt": None,
 
                 "source": "system",
             }
+        )
+
+    # =========================================================
+    # 30-DAY PASSWORD LIMIT
+    # =========================================================
+
+    def _check_monthly_password_limit(
+        self,
+        user: dict,
+    ) -> None:
+
+        last_changed = user.get(
+            "passwordLastChangedAt"
+        )
+
+        # -----------------------------------------------------
+        # Existing students who have never changed their
+        # application password are allowed to change it.
+        # -----------------------------------------------------
+
+        if not last_changed:
+            return
+
+        last_changed = (
+            self._as_utc_datetime(
+                last_changed
+            )
+        )
+
+        now = utc_now()
+
+        next_allowed = (
+            last_changed
+            + timedelta(
+                days=self.PASSWORD_CHANGE_INTERVAL_DAYS
+            )
+        )
+
+        # -----------------------------------------------------
+        # STILL LOCKED
+        # -----------------------------------------------------
+
+        if now < next_allowed:
+
+            remaining = (
+                next_allowed - now
+            )
+
+            remaining_seconds = (
+                remaining.total_seconds()
+            )
+
+            remaining_days = max(
+                1,
+                int(
+                    (
+                        remaining_seconds
+                        + 86399
+                    )
+                    // 86400
+                ),
+            )
+
+            # -------------------------------------------------
+            # Exact date for frontend/user message.
+            # -------------------------------------------------
+
+            available_date = (
+                next_allowed.strftime(
+                    "%d %B %Y"
+                )
+            )
+
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "You recently changed your password. "
+                    f"Please wait {remaining_days} "
+                    f"day(s) before changing it again. "
+                    f"You can change your password "
+                    f"again on {available_date}."
+                ),
+            )
+
+    # =========================================================
+    # PASSWORD CHANGE STATUS
+    # =========================================================
+    #
+    # Used by /auth/me so the frontend can immediately know
+    # whether the student can change the password.
+    #
+    # This method only REPORTS the status.
+    #
+    # _check_monthly_password_limit() remains the actual
+    # security enforcement.
+    #
+    # =========================================================
+
+    def get_password_change_status(
+        self,
+        user: dict,
+    ) -> dict:
+
+        last_changed = user.get(
+            "passwordLastChangedAt"
+        )
+
+        # -----------------------------------------------------
+        # Password has never been changed.
+        # -----------------------------------------------------
+
+        if not last_changed:
+
+            return {
+                "passwordLastChangedAt": None,
+
+                "passwordChangeAllowed": True,
+
+                "passwordChangeRemainingDays": 0,
+
+                "passwordChangeAvailableDate": None,
+            }
+
+        # -----------------------------------------------------
+        # Normalize stored datetime.
+        # -----------------------------------------------------
+
+        last_changed = (
+            self._as_utc_datetime(
+                last_changed
+            )
+        )
+
+        now = utc_now()
+
+        # -----------------------------------------------------
+        # Calculate next allowed date.
+        # -----------------------------------------------------
+
+        next_allowed = (
+            last_changed
+            + timedelta(
+                days=self.PASSWORD_CHANGE_INTERVAL_DAYS
+            )
+        )
+
+        # -----------------------------------------------------
+        # 30 DAYS COMPLETED
+        # -----------------------------------------------------
+
+        if now >= next_allowed:
+
+            return {
+                "passwordLastChangedAt": (
+                    last_changed.isoformat()
+                ),
+
+                "passwordChangeAllowed": True,
+
+                "passwordChangeRemainingDays": 0,
+
+                "passwordChangeAvailableDate": (
+                    next_allowed.strftime(
+                        "%d %B %Y"
+                    )
+                ),
+            }
+
+        # -----------------------------------------------------
+        # STILL LOCKED
+        # -----------------------------------------------------
+
+        remaining = (
+            next_allowed - now
+        )
+
+        remaining_seconds = (
+            remaining.total_seconds()
+        )
+
+        remaining_days = max(
+            1,
+            int(
+                (
+                    remaining_seconds
+                    + 86399
+                )
+                // 86400
+            ),
+        )
+
+        return {
+            "passwordLastChangedAt": (
+                last_changed.isoformat()
+            ),
+
+            "passwordChangeAllowed": False,
+
+            "passwordChangeRemainingDays": (
+                remaining_days
+            ),
+
+            "passwordChangeAvailableDate": (
+                next_allowed.strftime(
+                    "%d %B %Y"
+                )
+            ),
+        }
+
+    # =========================================================
+    # NORMALIZE DATETIME TO UTC
+    # =========================================================
+
+    @staticmethod
+    def _as_utc_datetime(
+        value: datetime,
+    ) -> datetime:
+
+        if value.tzinfo is None:
+
+            return value.replace(
+                tzinfo=timezone.utc
+            )
+
+        return value.astimezone(
+            timezone.utc
+        )
+
+    # =========================================================
+    # HASH OTP / VERIFICATION TOKEN
+    # =========================================================
+
+    @staticmethod
+    def _hash_otp(
+        value: str,
+    ) -> str:
+
+        return hashlib.sha256(
+            value.encode(
+                "utf-8"
+            )
+        ).hexdigest()
+
+    # =========================================================
+    # CLEAR OTP
+    # =========================================================
+
+    def _clear_password_otp(
+        self,
+        user_id: ObjectId,
+    ) -> None:
+
+        self.db[
+            USERS
+        ].update_one(
+            {
+                "_id": user_id,
+            },
+            {
+                "$unset": {
+                    "passwordOtpHash": "",
+                    "passwordOtpExpiresAt": "",
+                    "passwordOtpRequestedAt": "",
+                },
+                "$set": {
+                    "passwordOtpAttempts": 0,
+                },
+            },
+        )
+
+    # =========================================================
+    # CLEAR VERIFIED TOKEN
+    # =========================================================
+
+    def _clear_password_verification(
+        self,
+        user_id: ObjectId,
+    ) -> None:
+
+        self.db[
+            USERS
+        ].update_one(
+            {
+                "_id": user_id,
+            },
+            {
+                "$unset": {
+                    "passwordOtpVerifiedHash": "",
+                    "passwordOtpVerifiedExpiresAt": "",
+                }
+            },
         )
 
     # =========================================================

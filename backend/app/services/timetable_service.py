@@ -14,21 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 class TimetableService:
-    """
-    Service for synchronizing the student's complete timetable
-    information from Vel Tech AMS into MongoDB.
-
-    IMPORTANT:
-    - AMS attendance is NOT handled here.
-    - Existing attendance code is NOT touched.
-    - Only timetable-related AMS data is handled here.
-
-    Stored information:
-    - Student profile
-    - Bucket
-    - Course registered details
-    - Timetable
-    """
 
     def __init__(
         self,
@@ -40,18 +25,10 @@ class TimetableService:
             ams_adapter or AmsAdapter()
         )
 
-    # =========================================================
-    # GET STORED TIMETABLE
-    # =========================================================
-
     def get_student_timetable(
         self,
         student_id: str,
     ) -> list[dict[str, Any]]:
-        """
-        Get the student's active timetable records
-        from MongoDB.
-        """
 
         records = (
             self.db[TIMETABLE]
@@ -71,24 +48,10 @@ class TimetableService:
 
         return list(records)
 
-    # =========================================================
-    # GET COMPLETE STORED AMS DETAILS
-    # =========================================================
-
     def get_student_timetable_details(
         self,
         student_id: str,
     ) -> dict[str, Any]:
-        """
-        Return the complete stored timetable information.
-
-        This includes:
-
-        - Student profile
-        - Bucket
-        - Course registered details
-        - Timetable
-        """
 
         timetable_records = (
             self.get_student_timetable(
@@ -106,14 +69,16 @@ class TimetableService:
             )
         )
 
-        if metadata:
-            metadata.pop(
-                "_id",
-                None,
-            )
-
-        if not metadata:
+        if not isinstance(
+            metadata,
+            dict,
+        ):
             metadata = {}
+
+        metadata.pop(
+            "_id",
+            None,
+        )
 
         return {
             "profile": metadata.get(
@@ -121,7 +86,7 @@ class TimetableService:
                 {},
             ),
             "bucket": metadata.get(
-                "bucket"
+                "bucket",
             ),
             "courses": metadata.get(
                 "courses",
@@ -130,29 +95,12 @@ class TimetableService:
             "timetable": timetable_records,
         }
 
-    # =========================================================
-    # SYNC COMPLETE AMS TIMETABLE
-    # =========================================================
-
     async def sync_timetable(
         self,
         student_id: str,
         session: dict[str, Any],
         profile: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
-        """
-        Fetch the complete timetable page from AMS and
-        synchronize it into MongoDB.
-
-        AMS data collected:
-
-        1. Student Profile
-        2. Bucket
-        3. Course Registered Details
-        4. Time Table
-
-        Existing attendance data is never touched.
-        """
+    ) -> dict[str, Any]:
 
         if not student_id:
             raise ValueError(
@@ -164,42 +112,68 @@ class TimetableService:
                 "AMS session is required."
             )
 
-        profile = profile or {}
-
-        # =====================================================
-        # 1. FETCH COMPLETE AMS TIMETABLE PAGE
-        # =====================================================
-
-        details = (
-            await self.ams_adapter
-            .get_timetable_details(
-                session
-            )
+        profile = (
+            profile
+            if isinstance(profile, dict)
+            else {}
         )
 
-        if not details:
-            logger.warning(
-                "No timetable details returned from AMS "
-                "for student %s",
-                student_id,
-            )
+        details = None
 
-            return []
+        try:
+            details = await self.ams_adapter.get_timetable(
+                session
+            )
+        except AttributeError:
+            details = None
 
         if not isinstance(
             details,
             dict,
         ):
-            raise ValueError(
-                "Invalid timetable response from AMS."
+            try:
+                details = (
+                    await self.ams_adapter
+                    .get_timetable_details(
+                        session
+                    )
+                )
+            except AttributeError as exc:
+                raise ValueError(
+                    "AMS timetable method is not available."
+                ) from exc
+
+        if not details:
+            existing = (
+                self.get_student_timetable_details(
+                    student_id
+                )
             )
 
-        # =====================================================
-        # 2. EXTRACT AMS DATA
-        # =====================================================
+            return {
+                "profile": existing.get(
+                    "profile",
+                    {},
+                ),
+                "bucket": existing.get(
+                    "bucket",
+                ),
+                "courses": existing.get(
+                    "courses",
+                    [],
+                ),
+                "timetable": existing.get(
+                    "timetable",
+                    [],
+                ),
+                "inserted": 0,
+                "updated": 0,
+                "deactivated": 0,
+            }
 
         ams_profile = details.get(
-            "profile"
+            "profile",
+            {},
         )
 
         if not isinstance(
@@ -213,7 +187,8 @@ class TimetableService:
         )
 
         courses = details.get(
-            "courses"
+            "courses",
+            [],
         )
 
         if not isinstance(
@@ -223,7 +198,8 @@ class TimetableService:
             courses = []
 
         ams_records = details.get(
-            "timetable"
+            "timetable",
+            [],
         )
 
         if not isinstance(
@@ -232,102 +208,101 @@ class TimetableService:
         ):
             ams_records = []
 
-        # =====================================================
-        # 3. MERGE PROFILE
-        # =====================================================
-        #
-        # AMS profile has priority.
-        # Existing application profile is only a fallback.
-        # =====================================================
+        existing_metadata = (
+            self.db["timetable_metadata"]
+            .find_one(
+                {
+                    "studentId": student_id,
+                    "active": True,
+                }
+            )
+        )
+
+        if not isinstance(
+            existing_metadata,
+            dict,
+        ):
+            existing_metadata = {}
+
+        existing_profile = (
+            existing_metadata.get(
+                "profile",
+                {},
+            )
+        )
+
+        if not isinstance(
+            existing_profile,
+            dict,
+        ):
+            existing_profile = {}
+
+        existing_bucket = (
+            existing_metadata.get(
+                "bucket"
+            )
+        )
+
+        existing_courses = (
+            existing_metadata.get(
+                "courses",
+                [],
+            )
+        )
+
+        if not isinstance(
+            existing_courses,
+            list,
+        ):
+            existing_courses = []
 
         combined_profile = {
+            **existing_profile,
             **profile,
             **ams_profile,
         }
 
-        # Keep application student ID separately.
         combined_profile[
             "studentId"
         ] = student_id
 
-        # =====================================================
-        # 4. DO NOT DESTROY OLD DATA ON EMPTY AMS RESPONSE
-        # =====================================================
-        #
-        # This is important.
-        #
-        # If AMS temporarily returns an empty timetable,
-        # existing timetable data should remain available.
-        #
-        # We also do not deactivate anything.
-        # =====================================================
+        if (
+            bucket is None
+            or str(bucket).strip() == ""
+        ):
+            bucket = existing_bucket
+
+        if not courses:
+            courses = existing_courses
 
         if not ams_records:
 
-            logger.warning(
-                "AMS returned no timetable records for "
-                "student %s. Existing timetable was not changed.",
-                student_id,
+            self._save_metadata(
+                student_id=student_id,
+                profile=combined_profile,
+                bucket=bucket,
+                courses=courses,
             )
 
-            # Still save profile/course metadata if AMS
-            # successfully returned those sections.
-            if (
-                ams_profile
-                or bucket is not None
-                or courses
-            ):
-                self._save_metadata(
-                    student_id=student_id,
-                    profile=combined_profile,
-                    bucket=bucket,
-                    courses=courses,
+            existing_timetable = (
+                self.get_student_timetable(
+                    student_id
                 )
-
-            return self.get_student_timetable(
-                student_id
             )
 
-        # =====================================================
-        # 5. DEACTIVATE ONLY OLD AMS TIMETABLE
-        # =====================================================
-        #
-        # IMPORTANT:
-        #
-        # Only documents:
-        #     source = "ams"
-        #
-        # are touched.
-        #
-        # Attendance collections are not touched.
-        # =====================================================
-
-        now = datetime.utcnow()
-
-        self.db[TIMETABLE].update_many(
-            {
-                "studentId": student_id,
-                "source": "ams",
-                "active": True,
-            },
-            {
-                "$set": {
-                    "active": False,
-                    "updatedAt": now,
-                }
-            },
-        )
-
-        # =====================================================
-        # 6. ACADEMIC FALLBACK VALUES
-        # =====================================================
+            return {
+                "profile": combined_profile,
+                "bucket": bucket,
+                "courses": courses,
+                "timetable": existing_timetable,
+                "inserted": 0,
+                "updated": 0,
+                "deactivated": 0,
+            }
 
         semester = (
             combined_profile.get(
                 "semester"
-            )
-            or combined_profile.get(
-                "Semester"
             )
         )
 
@@ -335,29 +310,17 @@ class TimetableService:
             combined_profile.get(
                 "branch"
             )
-            or combined_profile.get(
-                "Branch"
-            )
         )
 
         section = (
             combined_profile.get(
                 "section"
             )
-            or combined_profile.get(
-                "Section"
-            )
         )
 
-        # =====================================================
-        # 7. PREPARE TIMETABLE DOCUMENTS
-        # =====================================================
-
-        documents: list[
-            dict[str, Any]
-        ] = []
-
-        seen_keys: set[tuple] = set()
+        documents = []
+        seen_keys = set()
+        now = datetime.utcnow()
 
         for record in ams_records:
 
@@ -367,63 +330,115 @@ class TimetableService:
             ):
                 continue
 
-            day = (
-                record.get("day")
-                or ""
+            day = self._value(
+                record,
+                "day",
+                "Day",
             )
 
-            subject_code = (
-                record.get(
-                    "subjectCode"
-                )
+            start_time = self._value(
+                record,
+                "startTime",
+                "start_time",
+                "StartTime",
+                "start",
+                "fromTime",
             )
 
-            subject_name = (
-                record.get(
-                    "subjectName"
-                )
-                or record.get(
-                    "courseName"
-                )
+            end_time = self._value(
+                record,
+                "endTime",
+                "end_time",
+                "EndTime",
+                "end",
+                "toTime",
             )
 
-            start_time = (
-                record.get(
-                    "startTime"
-                )
+            slot = self._value(
+                record,
+                "slot",
+                "period",
+                "Period",
             )
 
-            end_time = (
-                record.get(
-                    "endTime"
-                )
+            subject_code = self._value(
+                record,
+                "subjectCode",
+                "subject_code",
+                "courseCode",
+                "course_code",
             )
 
-            slot = (
-                record.get(
-                    "slot"
-                )
+            subject_name = self._value(
+                record,
+                "subjectName",
+                "subject_name",
+                "courseName",
+                "course_name",
+                "subject",
             )
 
-            room = (
-                record.get(
-                    "room"
-                )
+            room = self._value(
+                record,
+                "room",
+                "roomNumber",
+                "roomNo",
             )
 
-            # =================================================
-            # UNIQUE RECORD KEY
-            # =================================================
+            faculty = self._value(
+                record,
+                "faculty",
+                "facultyName",
+                "faculty_name",
+            )
+
+            subject_id = self._value(
+                record,
+                "subjectId",
+                "subject_id",
+            )
+
+            faculty_id = self._value(
+                record,
+                "facultyId",
+                "faculty_id",
+            )
+
+            record_semester = (
+                self._value(
+                    record,
+                    "semester",
+                    "Semester",
+                )
+                or semester
+            )
+
+            record_branch = (
+                self._value(
+                    record,
+                    "branch",
+                    "Branch",
+                )
+                or branch
+            )
+
+            record_section = (
+                self._value(
+                    record,
+                    "section",
+                    "Section",
+                )
+                or section
+            )
 
             key = (
-                student_id,
-                day,
-                subject_code,
-                subject_name,
-                start_time,
-                end_time,
-                slot,
-                room,
+                str(day or "").strip().lower(),
+                str(subject_code or "").strip().lower(),
+                str(subject_name or "").strip().lower(),
+                str(start_time or "").strip().lower(),
+                str(end_time or "").strip().lower(),
+                str(slot or "").strip().lower(),
+                str(room or "").strip().lower(),
             )
 
             if key in seen_keys:
@@ -431,20 +446,8 @@ class TimetableService:
 
             seen_keys.add(key)
 
-            # =================================================
-            # CREATE DOCUMENT
-            # =================================================
-
             document = {
-                # ---------------------------------------------
-                # APPLICATION STUDENT
-                # ---------------------------------------------
-
                 "studentId": student_id,
-
-                # ---------------------------------------------
-                # AMS PROFILE
-                # ---------------------------------------------
 
                 "idNumber": (
                     combined_profile.get(
@@ -457,19 +460,16 @@ class TimetableService:
 
                 "studentName": (
                     combined_profile.get(
-                        "name"
+                        "studentName"
                     )
                     or combined_profile.get(
-                        "studentName"
+                        "name"
                     )
                 ),
 
                 "rollNumber": (
                     combined_profile.get(
                         "rollNumber"
-                    )
-                    or combined_profile.get(
-                        "vtuNumber"
                     )
                 ),
 
@@ -491,76 +491,28 @@ class TimetableService:
                     )
                 ),
 
-                # ---------------------------------------------
-                # ACADEMIC
-                # ---------------------------------------------
-
-                "semester": (
-                    record.get(
-                        "semester"
-                    )
-                    or semester
-                ),
-
-                "branch": (
-                    record.get(
-                        "branch"
-                    )
-                    or branch
-                ),
-
-                "section": (
-                    record.get(
-                        "section"
-                    )
-                    or section
-                ),
-
-                # ---------------------------------------------
-                # BUCKET
-                # ---------------------------------------------
-
-                "bucket": bucket,
-
-                # ---------------------------------------------
-                # TIMETABLE
-                # ---------------------------------------------
-
                 "day": day,
 
                 "slot": slot,
 
-                "subjectId": (
-                    record.get(
-                        "subjectId"
-                    )
-                ),
+                "subjectId": subject_id,
 
                 "subjectCode": subject_code,
 
                 "subjectName": subject_name,
 
                 "courseName": (
-                    record.get(
-                        "courseName"
+                    self._value(
+                        record,
+                        "courseName",
+                        "course_name",
                     )
                     or subject_name
                 ),
 
-                "faculty": (
-                    record.get(
-                        "faculty"
-                    )
-                    or record.get(
-                        "facultyName"
-                    )
-                ),
+                "faculty": faculty,
 
-                "facultyId": (
-                    record.get(
-                        "facultyId"
-                    )
-                ),
+                "facultyId": faculty_id,
 
                 "startTime": start_time,
 
@@ -568,33 +520,28 @@ class TimetableService:
 
                 "room": room,
 
-                # ---------------------------------------------
-                # COURSE INFORMATION
-                # ---------------------------------------------
+                "semester": record_semester,
 
-                "category": (
-                    record.get(
-                        "category"
-                    )
+                "branch": record_branch,
+
+                "section": record_section,
+
+                "bucket": bucket,
+
+                "category": self._value(
+                    record,
+                    "category",
                 ),
 
-                "credit": (
-                    record.get(
-                        "credit"
-                    )
+                "credit": self._value(
+                    record,
+                    "credit",
+                    "credits",
                 ),
-
-                # ---------------------------------------------
-                # STATUS
-                # ---------------------------------------------
 
                 "active": True,
 
                 "source": "ams",
-
-                # ---------------------------------------------
-                # TIMESTAMPS
-                # ---------------------------------------------
 
                 "createdAt": now,
 
@@ -605,39 +552,62 @@ class TimetableService:
                 document
             )
 
-        # =====================================================
-        # 8. INSERT NEW TIMETABLE
-        # =====================================================
+        if not documents:
 
-        if documents:
-
-            result = (
-                self.db[TIMETABLE]
-                .insert_many(
-                    documents
+            existing_timetable = (
+                self.get_student_timetable(
+                    student_id
                 )
             )
 
-            logger.info(
-                "AMS timetable synchronized for student %s: "
-                "%s records",
-                student_id,
-                len(
-                    result.inserted_ids
-                ),
+            self._save_metadata(
+                student_id=student_id,
+                profile=combined_profile,
+                bucket=bucket,
+                courses=courses,
             )
 
-        else:
+            return {
+                "profile": combined_profile,
+                "bucket": bucket,
+                "courses": courses,
+                "timetable": existing_timetable,
+                "inserted": 0,
+                "updated": 0,
+                "deactivated": 0,
+            }
 
-            logger.warning(
-                "AMS timetable contained no valid records "
-                "for student %s",
-                student_id,
+        deactivate_result = (
+            self.db[TIMETABLE]
+            .update_many(
+                {
+                    "studentId": student_id,
+                    "source": "ams",
+                    "active": True,
+                },
+                {
+                    "$set": {
+                        "active": False,
+                        "updatedAt": now,
+                    }
+                },
             )
+        )
 
-        # =====================================================
-        # 9. SAVE PROFILE + BUCKET + COURSES
-        # =====================================================
+        deactivated = (
+            deactivate_result.modified_count
+        )
+
+        insert_result = (
+            self.db[TIMETABLE]
+            .insert_many(
+                documents
+            )
+        )
+
+        inserted = len(
+            insert_result.inserted_ids
+        )
 
         self._save_metadata(
             student_id=student_id,
@@ -646,17 +616,46 @@ class TimetableService:
             courses=courses,
         )
 
-        # =====================================================
-        # 10. RETURN STORED TIMETABLE
-        # =====================================================
-
-        return self.get_student_timetable(
-            student_id
+        stored_timetable = (
+            self.get_student_timetable(
+                student_id
+            )
         )
 
-    # =========================================================
-    # SAVE AMS METADATA
-    # =========================================================
+        return {
+            "profile": combined_profile,
+            "bucket": bucket,
+            "courses": courses,
+            "timetable": stored_timetable,
+            "inserted": inserted,
+            "updated": 0,
+            "deactivated": deactivated,
+        }
+
+    @staticmethod
+    def _value(
+        record: dict[str, Any],
+        *keys: str,
+    ) -> Any:
+
+        for key in keys:
+
+            value = record.get(
+                key
+            )
+
+            if value is None:
+                continue
+
+            if isinstance(
+                value,
+                str,
+            ) and not value.strip():
+                continue
+
+            return value
+
+        return None
 
     def _save_metadata(
         self,
@@ -665,34 +664,8 @@ class TimetableService:
         bucket: Any,
         courses: list[dict[str, Any]],
     ) -> None:
-        """
-        Store the non-row timetable information separately.
-
-        Collection:
-            timetable_metadata
-
-        This prevents the same student profile and course
-        registration table from being duplicated into every
-        timetable row.
-        """
 
         now = datetime.utcnow()
-
-        metadata = {
-            "studentId": student_id,
-
-            "profile": profile,
-
-            "bucket": bucket,
-
-            "courses": courses,
-
-            "active": True,
-
-            "source": "ams",
-
-            "updatedAt": now,
-        }
 
         existing = (
             self.db["timetable_metadata"]
@@ -703,6 +676,102 @@ class TimetableService:
                 }
             )
         )
+
+        existing_profile = {}
+
+        if isinstance(
+            existing,
+            dict,
+        ):
+            existing_profile = (
+                existing.get(
+                    "profile",
+                    {},
+                )
+            )
+
+            if not isinstance(
+                existing_profile,
+                dict,
+            ):
+                existing_profile = {}
+
+        merged_profile = {
+            **existing_profile,
+            **(
+                profile
+                if isinstance(
+                    profile,
+                    dict,
+                )
+                else {}
+            ),
+        }
+
+        merged_profile[
+            "studentId"
+        ] = student_id
+
+        final_bucket = bucket
+
+        if (
+            final_bucket is None
+            or str(
+                final_bucket
+            ).strip() == ""
+        ):
+
+            if isinstance(
+                existing,
+                dict,
+            ):
+                final_bucket = (
+                    existing.get(
+                        "bucket"
+                    )
+                )
+
+        final_courses = (
+            courses
+            if isinstance(
+                courses,
+                list,
+            )
+            else []
+        )
+
+        if (
+            not final_courses
+            and isinstance(
+                existing,
+                dict,
+            )
+        ):
+
+            old_courses = (
+                existing.get(
+                    "courses",
+                    [],
+                )
+            )
+
+            if isinstance(
+                old_courses,
+                list,
+            ):
+                final_courses = (
+                    old_courses
+                )
+
+        metadata = {
+            "studentId": student_id,
+            "profile": merged_profile,
+            "bucket": final_bucket,
+            "courses": final_courses,
+            "active": True,
+            "source": "ams",
+            "updatedAt": now,
+        }
 
         if existing:
 
@@ -729,21 +798,10 @@ class TimetableService:
                 metadata
             )
 
-    # =========================================================
-    # DEACTIVATE AMS TIMETABLE
-    # =========================================================
-
     def deactivate_student_timetable(
         self,
         student_id: str,
     ) -> int:
-        """
-        Deactivate the student's AMS timetable.
-
-        This does NOT delete the records.
-
-        Only AMS timetable records are affected.
-        """
 
         result = (
             self.db[TIMETABLE]
@@ -760,13 +818,6 @@ class TimetableService:
                     }
                 },
             )
-        )
-
-        logger.info(
-            "Deactivated %s timetable records "
-            "for student %s",
-            result.modified_count,
-            student_id,
         )
 
         return result.modified_count

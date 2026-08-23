@@ -216,7 +216,7 @@ export default function Dashboard() {
 
   const {
     summary = [],
-    todayAttendance = [],
+    todaysClasses = [],
     loading,
     error,
     refresh,
@@ -233,48 +233,9 @@ export default function Dashboard() {
     ? summary
     : [];
 
-  const safeTodayAttendance =
-    Array.isArray(todayAttendance)
-      ? todayAttendance
-      : [];
-
-  const todayPresentCount =
-    safeTodayAttendance.filter((record) => {
-      const status = String(
-        record?.status ||
-          record?.attendanceStatus ||
-          record?.attendance_status ||
-          ""
-      )
-        .trim()
-        .toUpperCase();
-
-      return (
-        status === "PRESENT" ||
-        status === "P"
-      );
-    }).length;
-
-  const todayAbsentCount =
-    safeTodayAttendance.filter((record) => {
-      const status = String(
-        record?.status ||
-          record?.attendanceStatus ||
-          record?.attendance_status ||
-          ""
-      )
-        .trim()
-        .toUpperCase();
-
-      return (
-        status === "ABSENT" ||
-        status === "A"
-      );
-    }).length;
-
-  const todayRecordedCount =
-    todayPresentCount +
-    todayAbsentCount;
+  const safeTodaysClasses = Array.isArray(todaysClasses)
+    ? todaysClasses
+    : [];
 
   // =====================================================
   // REFRESH
@@ -719,7 +680,7 @@ export default function Dashboard() {
         </div>
 
         {/* ================================================= */}
-        {/* TODAY'S ATTENDANCE - ADDED ONLY */}
+        {/* TODAY'S CLASSES */}
         {/* ================================================= */}
 
         <div className={`${premiumCard} p-5 sm:p-8`}>
@@ -729,11 +690,11 @@ export default function Dashboard() {
             <div>
 
               <h3 className="text-xl font-bold text-gray-900 drop-shadow-sm">
-                Today's Attendance
+                Today's Classes
               </h3>
 
               <p className="text-xs text-gray-600 mt-1 font-medium">
-                Attendance recorded for today's classes
+                Classes scheduled for today
               </p>
 
             </div>
@@ -756,93 +717,7 @@ export default function Dashboard() {
 
           </div>
 
-          {/* TODAY SUMMARY CARDS */}
-
-          <div className="grid grid-cols-3 gap-3 sm:gap-5 mb-6">
-
-            {/* PRESENT */}
-
-            <div className="rounded-2xl bg-emerald-50/80 backdrop-blur-md border border-emerald-200/50 p-4 sm:p-5 shadow-sm">
-
-              <div className="flex items-center gap-2 mb-2">
-
-                <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
-
-                  <span className="material-symbols-outlined text-[18px]">
-                    check_circle
-                  </span>
-
-                </div>
-
-                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-emerald-700">
-                  Present
-                </span>
-
-              </div>
-
-              <p className="text-3xl sm:text-4xl font-black text-emerald-600">
-                {todayPresentCount}
-              </p>
-
-            </div>
-
-            {/* ABSENT */}
-
-            <div className="rounded-2xl bg-rose-50/80 backdrop-blur-md border border-rose-200/50 p-4 sm:p-5 shadow-sm">
-
-              <div className="flex items-center gap-2 mb-2">
-
-                <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-rose-600">
-
-                  <span className="material-symbols-outlined text-[18px]">
-                    cancel
-                  </span>
-
-                </div>
-
-                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-rose-700">
-                  Absent
-                </span>
-
-              </div>
-
-              <p className="text-3xl sm:text-4xl font-black text-rose-600">
-                {todayAbsentCount}
-              </p>
-
-            </div>
-
-            {/* RECORDED */}
-
-            <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-white/60 p-4 sm:p-5 shadow-sm">
-
-              <div className="flex items-center gap-2 mb-2">
-
-                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600">
-
-                  <span className="material-symbols-outlined text-[18px]">
-                    calendar_today
-                  </span>
-
-                </div>
-
-                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-600">
-                  Recorded
-                </span>
-
-              </div>
-
-              <p className="text-3xl sm:text-4xl font-black text-gray-900">
-                {todayRecordedCount}
-              </p>
-
-            </div>
-
-          </div>
-
-          {/* TODAY SUBJECT LIST */}
-
-          {safeTodayAttendance.length === 0 ? (
+          {safeTodaysClasses.length === 0 ? (
 
             <div className="flex flex-col items-center justify-center text-center py-8 rounded-2xl bg-white/40 border border-white/50">
 
@@ -851,11 +726,11 @@ export default function Dashboard() {
               </span>
 
               <p className="text-sm font-bold text-gray-700">
-                No attendance recorded today
+                No classes scheduled today
               </p>
 
               <p className="text-xs text-gray-500 mt-1">
-                Today's attendance will appear here after synchronization.
+                Today's timetable will appear here after synchronization.
               </p>
 
             </div>
@@ -864,57 +739,83 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
 
-              {safeTodayAttendance.map(
-                (record, index) => {
+              {safeTodaysClasses.map((record, index) => {
 
-                  const status = String(
-                    record?.status ||
-                      record?.attendanceStatus ||
-                      record?.attendance_status ||
-                      ""
-                  )
-                    .trim()
-                    .toUpperCase();
+                const subjectName =
+                  record?.subjectName ||
+                  record?.subject_name ||
+                  record?.subject ||
+                  record?.courseName ||
+                  record?.course_name ||
+                  record?.subjectCode ||
+                  record?.subject_code ||
+                  "Unknown Subject";
 
-                  const isPresent =
-                    status === "PRESENT" ||
-                    status === "P";
+                const subjectCode =
+                  record?.subjectCode ||
+                  record?.subject_code ||
+                  record?.courseCode ||
+                  record?.course_code ||
+                  "";
 
-                  const subjectName =
-                    record?.subjectName ||
-                    record?.subject_name ||
-                    record?.subjectCode ||
-                    "Unknown Subject";
+                const startTime =
+                  record?.startTime ||
+                  record?.start_time ||
+                  record?.fromTime ||
+                  record?.from_time ||
+                  record?.start ||
+                  "";
 
-                  const subjectCode =
-                    record?.subjectCode ||
-                    record?.subject_code ||
-                    "";
+                const endTime =
+                  record?.endTime ||
+                  record?.end_time ||
+                  record?.toTime ||
+                  record?.to_time ||
+                  record?.end ||
+                  "";
 
-                  return (
-                    <div
-                      key={
-                        record?.id ||
-                        record?._id ||
-                        `${subjectCode}-${index}`
-                      }
-                      className="flex items-center justify-between gap-3 p-4 bg-white/60 backdrop-blur-md border border-white/60 rounded-2xl shadow-sm hover:bg-white/80 hover:shadow-md transition-all"
-                    >
+                const room =
+                  record?.room ||
+                  record?.roomNo ||
+                  record?.room_no ||
+                  record?.classRoom ||
+                  record?.classroom ||
+                  "";
+
+                const faculty =
+                  record?.faculty ||
+                  record?.facultyName ||
+                  record?.faculty_name ||
+                  record?.teacher ||
+                  record?.teacherName ||
+                  record?.teacher_name ||
+                  "";
+
+                const timeText =
+                  startTime && endTime
+                    ? `${startTime} - ${endTime}`
+                    : startTime || endTime || "Time not available";
+
+                return (
+                  <div
+                    key={
+                      record?.id ||
+                      record?._id ||
+                      record?.timetableId ||
+                      record?.timetable_id ||
+                      `${subjectCode}-${startTime}-${index}`
+                    }
+                    className="flex flex-col gap-4 p-4 bg-white/60 backdrop-blur-md border border-white/60 rounded-2xl shadow-sm hover:bg-white/80 hover:shadow-md transition-all"
+                  >
+
+                    <div className="flex items-start justify-between gap-3">
 
                       <div className="flex items-center gap-3 min-w-0">
 
-                        <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border shadow-inner ${
-                            isPresent
-                              ? "bg-emerald-50 border-emerald-200 text-emerald-600"
-                              : "bg-rose-50 border-rose-200 text-rose-600"
-                          }`}
-                        >
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-emerald-50 border border-emerald-200 text-[#185e3a]">
 
                           <span className="material-symbols-outlined text-[20px]">
-                            {isPresent
-                              ? "check"
-                              : "close"}
+                            menu_book
                           </span>
 
                         </div>
@@ -936,22 +837,59 @@ export default function Dashboard() {
 
                       </div>
 
-                      <span
-                        className={`shrink-0 px-2.5 py-1 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${
-                          isPresent
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-rose-50 text-rose-700 border-rose-200"
-                        }`}
-                      >
-                        {isPresent
-                          ? "Present"
-                          : "Absent"}
+                      <span className="shrink-0 px-2.5 py-1 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Today
                       </span>
 
                     </div>
-                  );
-                }
-              )}
+
+                    <div className="grid grid-cols-1 gap-2 pt-1">
+
+                      <div className="flex items-center gap-2 text-gray-700">
+
+                        <span className="material-symbols-outlined text-[17px] text-[#185e3a]">
+                          schedule
+                        </span>
+
+                        <span className="text-xs font-semibold">
+                          {timeText}
+                        </span>
+
+                      </div>
+
+                      {room && (
+                        <div className="flex items-center gap-2 text-gray-600">
+
+                          <span className="material-symbols-outlined text-[17px] text-[#185e3a]">
+                            location_on
+                          </span>
+
+                          <span className="text-xs font-medium truncate">
+                            {room}
+                          </span>
+
+                        </div>
+                      )}
+
+                      {faculty && (
+                        <div className="flex items-center gap-2 text-gray-600">
+
+                          <span className="material-symbols-outlined text-[17px] text-[#185e3a]">
+                            person
+                          </span>
+
+                          <span className="text-xs font-medium truncate">
+                            {faculty}
+                          </span>
+
+                        </div>
+                      )}
+
+                    </div>
+
+                  </div>
+                );
+              })}
 
             </div>
 
@@ -1115,155 +1053,6 @@ export default function Dashboard() {
           {/* ================= LEFT COLUMN ================= */}
 
           <div className="flex flex-col gap-6 lg:col-span-8 order-2 lg:order-1">
-
-            {/* Today's Sync */}
-
-            <div
-              className={`${premiumCard} flex flex-col p-5 sm:p-8 order-1 lg:order-2`}
-            >
-
-              <div className="flex justify-between items-center mb-6 border-b border-white/50 pb-4">
-
-                <div>
-
-                  <h3 className="text-xl font-bold text-gray-900 drop-shadow-sm">
-                    Today's Sync
-                  </h3>
-
-                  <p className="text-xs text-gray-600 mt-1 font-medium">
-                    Live from college records
-                  </p>
-
-                </div>
-
-                <div className="flex items-center gap-2 bg-emerald-50/80 backdrop-blur-sm text-emerald-700 px-3 py-1.5 rounded-full border border-emerald-200/50 shadow-sm">
-
-                  <span className="relative flex h-2 w-2">
-
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
-
-                  </span>
-
-                  <span className="text-[10px] font-bold uppercase tracking-widest hidden sm:inline-block">
-                    Live Updates
-                  </span>
-
-                  <span className="text-[10px] font-bold uppercase tracking-widest sm:hidden">
-                    Live
-                  </span>
-
-                </div>
-
-              </div>
-
-              <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[300px]">
-
-                {safeTodayAttendance.length === 0 ? (
-
-                  <div className="flex h-full flex-col items-center justify-center text-center py-10">
-
-                    <span className="material-symbols-outlined text-gray-400 text-5xl mb-2 drop-shadow-sm">
-                      event_busy
-                    </span>
-
-                    <p className="text-gray-600 font-medium text-sm">
-                      No classes logged today.
-                    </p>
-
-                  </div>
-
-                ) : (
-
-                  <div className="flex flex-col gap-3">
-
-                    {safeTodayAttendance.map(
-                      (record, index) => {
-
-                        const isPresent =
-                          String(
-                            record?.status || ""
-                          ).toUpperCase() ===
-                            "PRESENT" ||
-                          String(
-                            record?.status || ""
-                          ).toUpperCase() ===
-                            "P";
-
-                        return (
-
-                          <div
-                            key={index}
-                            className="flex items-center justify-between p-4 bg-white/60 backdrop-blur-md border border-white/60 rounded-2xl hover:bg-white/80 hover:shadow-md transition-all shadow-sm"
-                          >
-
-                            <div className="flex items-center gap-4">
-
-                              <div
-                                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-inner border ${
-                                  isPresent
-                                    ? "bg-[#ecfdf5]/80 border-emerald-200/50 text-[#10b981]"
-                                    : "bg-[#fef2f2]/80 border-rose-200/50 text-[#ef4444]"
-                                }`}
-                              >
-
-                                <span className="material-symbols-outlined text-[20px]">
-
-                                  {isPresent
-                                    ? "check"
-                                    : "close"}
-
-                                </span>
-
-                              </div>
-
-                              <div>
-
-                                <h4
-                                  className="text-sm font-bold text-gray-900 line-clamp-1 drop-shadow-sm"
-                                  title={
-                                    record?.subjectName ||
-                                    record?.subjectCode
-                                  }
-                                >
-                                  {record?.subjectName ||
-                                    record?.subjectCode ||
-                                    "Unknown Subject"}
-                                </h4>
-
-                                <p className="text-[11px] font-bold text-gray-500 mt-0.5 uppercase tracking-widest">
-                                  {record?.subjectCode ||
-                                    "N/A"}
-                                </p>
-
-                              </div>
-
-                            </div>
-
-                            <div
-                              className={`px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider shadow-sm border ${
-                                isPresent
-                                  ? "bg-[#ecfdf5]/80 border-emerald-200/50 text-[#10b981]"
-                                  : "bg-[#fef2f2]/80 border-rose-200/50 text-[#ef4444]"
-                              }`}
-                            >
-                              {record?.status}
-                            </div>
-
-                          </div>
-
-                        );
-                      }
-                    )}
-
-                  </div>
-
-                )}
-
-              </div>
-
-            </div>
 
             {/* Attendance Summary Graph */}
 

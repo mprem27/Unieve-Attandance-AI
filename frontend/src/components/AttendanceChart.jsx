@@ -229,6 +229,11 @@ export default function AttendanceChart({ attendance = [] }) {
     const days = [];
     for (let i = 0; i < firstDay; i++) days.push(null);
     for (let day = 1; day <= daysInMonth; day++) days.push(day);
+
+    // Always render exactly 6 calendar rows.
+    // This keeps the calendar height constant when switching months.
+    while (days.length < 42) days.push(null);
+
     return days;
   }, [firstDay, daysInMonth]);
 
@@ -316,22 +321,24 @@ export default function AttendanceChart({ attendance = [] }) {
       `}} />
 
       {/* ======================= MAIN LAYOUT GRID ======================= */}
-      <div className="grid gap-6 lg:gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
+      <div className="grid items-start gap-6 lg:gap-8 lg:grid-cols-[1.1fr_0.9fr]">
         
         {/* ======================= 1. LEFT PANEL: CALENDAR WIDGET (STRICT FIXED HEIGHT) ======================= */}
-        <div className="rounded-[32px] border border-slate-200/80 bg-white p-5 shadow-lg shadow-[#1e3a8a]/5 sm:p-8 relative overflow-hidden flex flex-col justify-between min-h-[580px] lg:min-h-[620px]">
+        <div
+          className="rounded-[32px] border border-slate-200/80 bg-white p-5 shadow-lg shadow-[#1e3a8a]/5 sm:p-8 relative overflow-hidden flex h-[460px] min-h-[460px] max-h-[460px] flex-none flex-col justify-between lg:h-[620px] lg:min-h-[620px] lg:max-h-[620px]"
+        >
           
           <div className="absolute left-0 top-0 h-1.5 w-full bg-gradient-to-r from-[#1e3a8a] via-[#0ea5e9] to-[#1e3a8a]" />
 
           <div>
             {/* CALENDAR HEADER */}
-            <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-2">
+            <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
               <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0ea5e9]/10 text-[#0ea5e9] shadow-inner shadow-[#0ea5e9]/20">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#0ea5e9]/10 text-[#0ea5e9] shadow-inner shadow-[#0ea5e9]/20">
                   <CalendarDays size={24} />
                 </div>
                 <div>
-                  <h2 className="text-xl font-black text-[#1e3a8a] sm:text-2xl tracking-tight">
+                  <h2 className="text-lg font-black text-[#1e3a8a] sm:text-2xl tracking-tight">
                     Attendance Calendar
                   </h2>
                   <p className="mt-1 text-xs font-medium text-slate-500">
@@ -350,7 +357,7 @@ export default function AttendanceChart({ attendance = [] }) {
             </div>
             
             {/* MONTH SELECTOR */}
-            <div className="mb-4 flex items-center justify-between border-t border-slate-100 pt-4">
+            <div className="mb-3 flex items-center justify-between border-t border-slate-100 pt-3">
               <button
                 type="button"
                 onClick={previousMonth}
@@ -380,10 +387,17 @@ export default function AttendanceChart({ attendance = [] }) {
             </div>
 
             {/* CALENDAR GRID */}
-            <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+            <div
+              className="grid h-[216px] min-h-[216px] max-h-[216px] grid-cols-7 grid-rows-6 gap-1 sm:h-[342px] sm:min-h-[342px] sm:max-h-[342px] sm:gap-1.5"
+            >
               {calendarDays.map((day, index) => {
                 if (day === null) {
-                  return <div key={`empty-${index}`} className="w-full aspect-square" />;
+                  return (
+                    <div
+                      key={`empty-${index}`}
+                      className="h-full w-full min-h-0"
+                    />
+                  );
                 }
 
                 const dateKey = makeDateKey(currentYear, currentMonth, day);
@@ -401,9 +415,9 @@ export default function AttendanceChart({ attendance = [] }) {
                     type="button"
                     onClick={() => selectDate(day)}
                     className={`
-                      relative w-full aspect-square flex items-center justify-center rounded-full transition-all duration-200
+                      relative flex h-full min-h-0 w-full items-center justify-center rounded-full transition-all duration-200
                       ${isSelected 
-                          ? "border-[1.5px] border-[#1e3a8a] bg-slate-50 shadow-sm z-10 scale-[1.05]" 
+                          ? "border-[1.5px] border-[#1e3a8a] bg-slate-50 shadow-sm z-10" 
                           : hasRecords 
                           ? "bg-transparent hover:bg-slate-50 z-0" 
                           : "bg-transparent opacity-50 hover:bg-slate-50 hover:opacity-100 z-0"}
@@ -448,9 +462,12 @@ export default function AttendanceChart({ attendance = [] }) {
         </div>
 
         {/* ======================= 2. RIGHT PANEL: SELECTED DAY DETAILS (STRICT FIXED HEIGHT) ======================= */}
-        <div className="flex flex-col rounded-[32px] border border-slate-200/80 bg-white p-5 shadow-lg shadow-[#1e3a8a]/5 sm:p-8 lg:sticky lg:top-24 min-h-[580px] lg:min-h-[620px] justify-between">
+        <div
+          className="flex h-[580px] min-h-[580px] max-h-[580px] flex-none flex-col rounded-[32px] border border-slate-200/80 bg-white p-5 shadow-lg shadow-[#1e3a8a]/5 sm:p-8 lg:sticky lg:top-24 lg:h-[620px] lg:min-h-[620px] lg:max-h-[620px] justify-between overflow-hidden"
+          style={{ height: "580px", minHeight: "580px", maxHeight: "580px" }}
+        >
           
-          <div>
+          <div className="shrink-0">
             {/* HEADER */}
             <div className="mb-5 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -504,7 +521,7 @@ export default function AttendanceChart({ attendance = [] }) {
           </div>
 
           {/* RECORDS LIST CONTAINER (LOCKED HEIGHT AREA) */}
-          <div className="flex flex-col h-[240px] sm:h-[260px] pt-1">
+          <div className="flex h-[240px] min-h-0 shrink-0 flex-col pt-1 sm:h-[260px]">
             <div className="mb-3 flex items-center justify-between shrink-0">
               <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Class Schedule</h4>
             </div>
@@ -516,7 +533,7 @@ export default function AttendanceChart({ attendance = [] }) {
                 <p className="mt-0.5 text-[11px] text-slate-500">No records for this date.</p>
               </div>
             ) : (
-              <div key={selectedDate} className="custom-calendar-scroll flex-1 space-y-2.5 overflow-y-auto pr-1 pb-1">
+              <div key={selectedDate} className="custom-calendar-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1 pb-1">
                 {selectedRecords.map((item, index) => {
                   const record = item.record;
                   const isPresent = item.status === "present";

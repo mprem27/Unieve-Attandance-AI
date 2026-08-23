@@ -25,11 +25,12 @@ import {
 } from "../utils/dateUtils";
 
 // =====================================================
-// HELPERS
+// BASIC HELPERS
 // =====================================================
 
 const clean = (value) => {
   if (value === null || value === undefined) return "";
+  if (typeof value === "object") return "";
   return String(value).trim();
 };
 
@@ -41,91 +42,264 @@ const displayValue = (value) => {
   return text;
 };
 
+const isObject = (value) => {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+};
+
 const firstValue = (...values) => {
   for (const value of values) {
-    if (value !== undefined && value !== null && String(value).trim() !== "") {
+    if (value !== null && value !== undefined && clean(value) !== "") {
       return value;
     }
   }
   return "";
 };
 
+const normalizeKey = (value) => {
+  return clean(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+};
+
 const getInitials = (name) => {
-  if (!name) return "U";
-  const parts = String(name).trim().split(/\s+/).filter(Boolean);
+  const value = clean(name);
+  if (!value) return "U";
+  const parts = value.split(/\s+/).filter(Boolean);
   if (parts.length === 1) return parts[0][0]?.toUpperCase() || "U";
   return (`${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`).toUpperCase();
 };
 
 // =====================================================
-// NORMALIZE PROFILE
+// FIND VALUE RECURSIVELY
 // =====================================================
 
-const normalizeProfile = (data = {}, amsProfile = {}) => {
-  const profile = amsProfile && typeof amsProfile === "object" ? amsProfile : {};
+const findNestedValue = (root, aliases, maxDepth = 8) => {
+  if (root === null || root === undefined || maxDepth < 0) return "";
+  if (!isObject(root) && !Array.isArray(root)) return "";
 
-  return {
-    ...data,
+  const aliasSet = new Set(aliases.map(normalizeKey));
+  const visited = new WeakSet();
 
-    // BASIC
-    id: firstValue(data.id, data._id, data.userId, data.user_id),
-    name: firstValue(data.name, data.fullName, data.full_name, data.studentName, data.student_name, profile.name, profile.fullName, profile.full_name, profile.studentName, profile.student_name),
-    email: firstValue(data.email, data.emailAddress, data.email_address, profile.email, profile.emailAddress, profile.email_address),
-    role: firstValue(data.role, data.userRole, data.user_role, "student"),
+  const search = (value, depth) => {
+    if (value === null || value === undefined || depth < 0) return "";
+    if (typeof value !== "object") return "";
+    if (visited.has(value)) return "";
+    visited.add(value);
 
-    // STUDENT IDENTIFICATION
-    studentId: firstValue(data.studentId, data.student_id, profile.studentId, profile.student_id),
-    vtuNumber: firstValue(data.vtuNumber, data.vtu_number, data.portalUsername, data.portal_username, profile.vtuNumber, profile.vtu_number, profile.portalUsername, profile.portal_username),
-    rollNumber: firstValue(data.rollNumber, data.roll_number, data.registrationNumber, data.registration_number, profile.rollNumber, profile.roll_number, profile.registrationNumber, profile.registration_number),
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const result = search(item, depth - 1);
+        if (clean(result)) return result;
+      }
+      return "";
+    }
 
-    // PERSONAL
-    gender: firstValue(data.gender, data.sex, profile.gender, profile.sex),
-    fatherName: firstValue(data.fatherName, data.father_name, data.father, profile.fatherName, profile.father_name, profile.father),
-    motherName: firstValue(data.motherName, data.mother_name, data.mother, profile.motherName, profile.mother_name, profile.mother),
-    dateOfBirth: firstValue(data.dateOfBirth, data.date_of_birth, data.dob, profile.dateOfBirth, profile.date_of_birth, profile.dob),
-    nationality: firstValue(data.nationality, profile.nationality),
-    community: firstValue(data.community, data.caste, profile.community, profile.caste),
-    religion: firstValue(data.religion, profile.religion),
+    for (const [key, fieldValue] of Object.entries(value)) {
+      if (
+        aliasSet.has(normalizeKey(key)) &&
+        fieldValue !== null &&
+        fieldValue !== undefined &&
+        typeof fieldValue !== "object" &&
+        clean(fieldValue) !== ""
+      ) {
+        return fieldValue;
+      }
+    }
 
-    // ACADEMIC
-    degree: firstValue(data.degree, data.program, data.course, profile.degree, profile.program, profile.course),
-    branch: firstValue(data.branch, data.department, data.dept, profile.branch, profile.department, profile.dept),
-    year: firstValue(data.year, data.studyYear, data.study_year, profile.year, profile.studyYear, profile.study_year),
-    semester: firstValue(data.semester, data.sem, profile.semester, profile.sem),
-    section: firstValue(data.section, data.classSection, data.class_section, profile.section, profile.classSection, profile.class_section),
-    batch: firstValue(data.batch, data.batchName, data.batch_name, profile.batch, profile.batchName, profile.batch_name),
-    regulation: firstValue(data.regulation, data.regulationName, data.regulation_name, profile.regulation, profile.regulationName, profile.regulation_name),
-
-    // CONTACT
-    phoneNumber: firstValue(data.phoneNumber, data.phone_number, data.phone, data.mobileNumber, data.mobile_number, data.mobile, profile.phoneNumber, profile.phone_number, profile.phone, profile.mobileNumber, profile.mobile_number, profile.mobile),
-    parentName: firstValue(data.parentName, data.parent_name, data.guardianName, data.guardian_name, profile.parentName, profile.parent_name, profile.guardianName, profile.guardian_name),
-    parentPhone: firstValue(data.parentPhone, data.parent_phone, data.guardianPhone, data.guardian_phone, profile.parentPhone, profile.parent_phone, profile.guardianPhone, profile.guardian_phone),
-
-    // IDENTIFICATION
-    aadhaarNumber: firstValue(data.aadhaarNumber, data.aadhaar_number, data.aadhaar, profile.aadhaarNumber, profile.aadhaar_number, profile.aadhaar),
-    academicBankCreditsId: firstValue(data.academicBankCreditsId, data.academic_bank_credits_id, data.academicBankOfCreditsId, data.academic_bank_of_credits_id, data.abcId, data.abc_id, profile.academicBankCreditsId, profile.academic_bank_credits_id, profile.academicBankOfCreditsId, profile.academic_bank_of_credits_id, profile.abcId, profile.abc_id),
-
-    // PHOTO
-    photoUrl: firstValue(data.photoUrl, data.photo_url, data.profileImage, data.profile_image, data.avatar, profile.photoUrl, profile.photo_url, profile.profileImage, profile.profile_image, profile.avatar),
-
-    // SETTINGS
-    smsEnabled: data.smsEnabled ?? data.sms_enabled ?? true,
-    notificationsEnabled: data.notificationsEnabled ?? data.notifications_enabled ?? true,
-
-    // ACCOUNT
-    active: data.active ?? data.isActive ?? data.is_active ?? true,
-    forcePasswordChange: data.forcePasswordChange ?? data.force_password_change ?? false,
-
-    // PORTAL
-    portalUsername: firstValue(data.portalUsername, data.portal_username, data.vtuNumber, data.vtu_number, profile.portalUsername, profile.portal_username, profile.vtuNumber, profile.vtu_number),
-    portalCredentialsConfigured: data.portalCredentialsConfigured ?? data.portal_credentials_configured ?? Boolean(data.portalUsername || data.portal_username),
-    portalSynced: data.portalSynced ?? data.portal_synced ?? data.amsSynced ?? data.ams_synced ?? false,
-    lastSyncedAt: firstValue(data.lastSyncedAt, data.last_synced_at, data.syncedAt, data.synced_at, profile.lastSyncedAt, profile.last_synced_at),
+    for (const fieldValue of Object.values(value)) {
+      if (fieldValue && typeof fieldValue === "object") {
+        const result = search(fieldValue, depth - 1);
+        if (clean(result)) return result;
+      }
+    }
+    return "";
   };
+
+  return search(root, maxDepth);
+};
+
+const extractProfileObject = (response) => {
+  if (!isObject(response)) return {};
+  const directProfileFields = [
+    "id", "name", "fullName", "email", "role", "studentId", "vtuNumber", "rollNumber",
+    "fatherName", "motherName", "gender", "dateOfBirth", "dob", "degree", "branch",
+    "department", "year", "semester", "section", "batch", "regulation", "community",
+    "religion", "nationality", "phoneNumber", "mobileNumber", "parentName", "parentPhone",
+    "aadhaarNumber", "academicBankCreditsId", "photoUrl", "smsEnabled", "notificationsEnabled",
+    "active", "forcePasswordChange", "portalUsername", "portalCredentialsConfigured",
+    "portalSynced", "lastSyncedAt", "portalSyncInProgress", "portalSyncLastError",
+  ];
+
+  const normalizedResponseKeys = new Set(Object.keys(response).map(normalizeKey));
+  const hasDirectProfileField = directProfileFields.some((field) => normalizedResponseKeys.has(normalizeKey(field)));
+
+  if (hasDirectProfileField) return response;
+
+  const possibleKeys = ["user", "profile", "student", "studentProfile", "studentData", "userData", "details", "data", "academic", "studentDetails"];
+  for (const key of possibleKeys) {
+    const actualKey = Object.keys(response).find((responseKey) => normalizeKey(responseKey) === normalizeKey(key));
+    if (actualKey && isObject(response[actualKey])) {
+      const extracted = extractProfileObject(response[actualKey]);
+      if (Object.keys(extracted).length) return extracted;
+    }
+  }
+  return response;
 };
 
 // =====================================================
-// INFO ITEM (Premium Pill Style)
+// FIELD GETTERS
+// =====================================================
+
+const getStudentName = (source) => findNestedValue(source, ["name", "fullName", "full_name", "studentName", "student_name", "candidateName", "candidate_name", "studentFullName"]);
+const getStudentId = (source) => findNestedValue(source, ["studentId", "student_id", "studentID", "idNumber", "id_number", "studentNumber", "student_number"]);
+const getVtuNumber = (source) => findNestedValue(source, ["vtuNumber", "vtu_number", "vtuNo", "vtu_no", "vtu", "VTU", "portalUsername", "portal_username", "username", "registrationNo", "registrationNumber", "registration_number", "regNo", "regNumber"]);
+const getRollNumber = (source) => findNestedValue(source, ["rollNumber", "roll_number", "rollNo", "roll_no", "roll", "studentRollNumber", "student_roll_number", "studentRollNo"]);
+const getDegree = (source) => findNestedValue(source, ["degree", "degreeName", "degree_name", "program", "programName", "program_name", "programme", "programmeName", "course"]);
+const getBranch = (source) => findNestedValue(source, ["branch", "branchName", "branch_name", "department", "departmentName", "department_name", "dept", "deptName", "dept_name"]);
+const getYear = (source) => findNestedValue(source, ["year", "studyYear", "study_year", "academicYear", "academic_year", "yearOfStudy", "year_of_study", "currentYear"]);
+const getSemester = (source) => findNestedValue(source, ["semester", "semesterName", "semester_name", "semesterNo", "semester_no", "semesterNumber", "semester_number", "sem", "semNo", "semNumber", "currentSemester"]);
+const getSection = (source) => findNestedValue(source, ["section", "sectionName", "section_name", "classSection", "class_section", "division", "class"]);
+const getBatch = (source) => findNestedValue(source, ["batch", "batchName", "batch_name", "batchYear", "batch_year", "academicBatch", "academic_batch"]);
+const getRegulation = (source) => findNestedValue(source, ["regulation", "regulationName", "regulation_name", "regulationCode", "regulation_code", "reg"]);
+const getBucket = (source) => findNestedValue(source, ["bucket", "bucketName", "bucket_name", "bucketCode", "bucket_code", "yourBucket", "your_bucket", "academicBucket", "academic_bucket", "studentBucket", "student_bucket"]);
+const getGender = (source) => findNestedValue(source, ["gender", "sex"]);
+const getDateOfBirth = (source) => findNestedValue(source, ["dateOfBirth", "date_of_birth", "dob", "birthDate", "birth_date", "dateOfBirthText"]);
+const getNationality = (source) => findNestedValue(source, ["nationality", "citizenship"]);
+const getCommunity = (source) => findNestedValue(source, ["community", "communityName", "community_name", "caste", "casteName", "caste_name"]);
+const getReligion = (source) => findNestedValue(source, ["religion", "religionName", "religion_name"]);
+const getPhoneNumber = (source) => findNestedValue(source, ["phoneNumber", "phone_number", "phone", "mobileNumber", "mobile_number", "mobile", "mobileNo", "mobile_no", "contactNumber", "contact_number"]);
+const getFatherName = (source) => findNestedValue(source, ["fatherName", "father_name", "father", "fathername", "fatherFullName"]);
+const getMotherName = (source) => findNestedValue(source, ["motherName", "mother_name", "mother", "mothername", "motherFullName"]);
+const getParentName = (source) => findNestedValue(source, ["parentName", "parent_name", "guardianName", "guardian_name", "guardian"]);
+const getParentPhone = (source) => findNestedValue(source, ["parentPhone", "parent_phone", "guardianPhone", "guardian_phone", "parentMobile", "parent_mobile", "guardianMobile", "guardian_mobile"]);
+const getAcademicBankCreditsId = (source) => findNestedValue(source, ["academicBankCreditsId", "academic_bank_credits_id", "academicBankOfCreditsId", "academic_bank_of_credits_id", "academicBankId", "academic_bank_id", "abcId", "abc_id", "ABCId"]);
+const getAadhaarNumber = (source) => findNestedValue(source, ["aadhaarNumber", "aadhaar_number", "aadhaar", "aadharNumber", "aadhar_number", "aadhar"]);
+const getPhotoUrl = (source) => findNestedValue(source, ["photoUrl", "photo_url", "profileImage", "profile_image", "profilePhoto", "profile_photo", "avatar", "image", "imageUrl", "image_url"]);
+
+const normalizeProfile = (profileData = {}, amsData = {}) => {
+  const profile = isObject(profileData) ? profileData : {};
+  const ams = isObject(amsData) ? amsData : {};
+
+  const name = firstValue(profile.name, profile.fullName, getStudentName(ams));
+  const studentId = firstValue(profile.studentId, profile.student_id, getStudentId(ams));
+  const vtuNumber = firstValue(profile.vtuNumber, profile.vtu_number, getVtuNumber(ams));
+  const rollNumber = firstValue(profile.rollNumber, profile.roll_number, getRollNumber(ams));
+  const gender = firstValue(profile.gender, getGender(ams));
+  const dateOfBirth = firstValue(profile.dateOfBirth, profile.date_of_birth, getDateOfBirth(ams));
+  const nationality = firstValue(profile.nationality, getNationality(ams));
+  const community = firstValue(profile.community, getCommunity(ams));
+  const religion = firstValue(profile.religion, getReligion(ams));
+  const fatherName = firstValue(profile.fatherName, profile.father_name, getFatherName(ams));
+  const motherName = firstValue(profile.motherName, profile.mother_name, getMotherName(ams));
+  const parentName = firstValue(profile.parentName, profile.parent_name, getParentName(ams));
+  const parentPhone = firstValue(profile.parentPhone, profile.parent_phone, getParentPhone(ams));
+  const phoneNumber = firstValue(profile.phoneNumber, profile.phone_number, profile.mobileNumber, profile.mobile_number, getPhoneNumber(ams));
+  const degree = firstValue(profile.degree, getDegree(ams));
+  const branch = firstValue(profile.branch, getBranch(ams));
+  const year = firstValue(profile.year, getYear(ams));
+  const semester = firstValue(profile.semester, getSemester(ams));
+  const section = firstValue(profile.section, getSection(ams));
+  const batch = firstValue(profile.batch, getBatch(ams));
+  const regulation = firstValue(profile.regulation, getRegulation(ams));
+  const academicBankCreditsId = firstValue(profile.academicBankCreditsId, profile.academic_bank_credits_id, getAcademicBankCreditsId(ams));
+  const aadhaarNumber = firstValue(profile.aadhaarNumber, profile.aadhaar_number, getAadhaarNumber(ams));
+  const photoUrl = firstValue(profile.photoUrl, profile.photo_url, getPhotoUrl(ams));
+
+  return {
+    ...profile,
+    id: firstValue(profile.id, profile._id),
+    name,
+    email: firstValue(profile.email),
+    role: firstValue(profile.role, "student"),
+    studentId,
+    vtuNumber,
+    rollNumber,
+    gender,
+    dateOfBirth,
+    nationality,
+    community,
+    religion,
+    fatherName,
+    motherName,
+    parentName,
+    parentPhone,
+    phoneNumber,
+    degree,
+    branch,
+    year,
+    semester,
+    section,
+    batch,
+    regulation,
+    aadhaarNumber,
+    academicBankCreditsId,
+    photoUrl,
+    smsEnabled: typeof profile.smsEnabled === "boolean" ? profile.smsEnabled : true,
+    notificationsEnabled: typeof profile.notificationsEnabled === "boolean" ? profile.notificationsEnabled : true,
+    active: typeof profile.active === "boolean" ? profile.active : true,
+    forcePasswordChange: typeof profile.forcePasswordChange === "boolean" ? profile.forcePasswordChange : false,
+    portalUsername: firstValue(profile.portalUsername, profile.portal_username, vtuNumber),
+    portalCredentialsConfigured: typeof profile.portalCredentialsConfigured === "boolean" ? profile.portalCredentialsConfigured : false,
+    portalSynced: typeof profile.portalSynced === "boolean" ? profile.portalSynced : false,
+    lastSyncedAt: firstValue(profile.lastSyncedAt, profile.last_synced_at) || null,
+    portalSyncInProgress: typeof profile.portalSyncInProgress === "boolean" ? profile.portalSyncInProgress : false,
+    portalSyncLastError: firstValue(profile.portalSyncLastError, profile.portal_sync_last_error) || null,
+  };
+};
+
+const extractCourses = (root, maxDepth = 8) => {
+  if (root === null || root === undefined || maxDepth < 0) return [];
+  if (!isObject(root) && !Array.isArray(root)) return [];
+
+  const courseKeys = new Set(["courses", "registeredCourses", "registered_courses", "registeredSubjects", "registered_subjects", "subjects", "courseList", "course_list", "subjectList", "subject_list", "courseRegisteredDetails", "course_registered_details"]);
+  const visited = new WeakSet();
+
+  const search = (value, depth) => {
+    if (value === null || value === undefined || depth < 0 || typeof value !== "object") return [];
+    if (visited.has(value)) return [];
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const result = search(item, depth - 1);
+        if (result.length) return result;
+      }
+      return [];
+    }
+
+    for (const [key, fieldValue] of Object.entries(value)) {
+      if (courseKeys.has(normalizeKey(key)) && Array.isArray(fieldValue)) {
+        return fieldValue;
+      }
+    }
+
+    for (const fieldValue of Object.values(value)) {
+      if (fieldValue && typeof fieldValue === "object") {
+        const result = search(fieldValue, depth - 1);
+        if (result.length) return result;
+      }
+    }
+    return [];
+  };
+
+  return search(root, maxDepth);
+};
+
+const extractBucket = (academicDetails) => {
+  return firstValue(getBucket(academicDetails));
+};
+
+// Course extract helpers
+const getCourseName = (course) => firstValue(course?.courseName, course?.course_name, course?.subjectName, course?.subject_name, course?.name, course?.courseTitle, course?.course_title, course?.subject, course?.title);
+const getCourseCode = (course) => firstValue(course?.courseCode, course?.course_code, course?.subjectCode, course?.subject_code, course?.code, course?.coursecode);
+const getCourseCredits = (course) => firstValue(course?.credit, course?.credits, course?.creditHours, course?.credit_hours);
+const getCourseFaculty = (course) => firstValue(course?.facultyName, course?.faculty_name, course?.faculty, course?.teacherName, course?.teacher_name, course?.teacher, course?.staffName, course?.staff_name, course?.staff);
+const getCourseFacultyId = (course) => firstValue(course?.facultyId, course?.faculty_id, course?.staffId, course?.staff_id);
+const getCourseCategory = (course) => firstValue(course?.category, course?.courseCategory, course?.course_category, course?.courseType, course?.course_type, course?.type);
+const getCourseSlot = (course) => firstValue(course?.slot, course?.slotName, course?.slot_name, course?.timeSlot, course?.time_slot, course?.period, course?.periodName, course?.period_name);
+const getCourseRoom = (course) => firstValue(course?.room, course?.roomNo, course?.room_no, course?.roomNumber, course?.room_number, course?.classroom);
+
+
+// =====================================================
+// INFO ITEM
 // =====================================================
 
 function InfoItem({ label, value, mono = false }) {
@@ -142,7 +316,7 @@ function InfoItem({ label, value, mono = false }) {
 }
 
 // =====================================================
-// SECTION (Glass/Premium Wrapper)
+// SECTION
 // =====================================================
 
 function Section({ title, description, children, delay = 0 }) {
@@ -169,70 +343,16 @@ function Section({ title, description, children, delay = 0 }) {
 }
 
 // =====================================================
-// COURSE CARD (Premium Redesign)
-// =====================================================
-
-function CourseCard({ course, index }) {
-  const courseName = firstValue(course.courseName, course.subjectName, course.name, course.course);
-  const courseCode = firstValue(course.courseCode, course.subjectCode, course.code);
-  const credits = firstValue(course.credit, course.credits, course.creditHours);
-  const faculty = firstValue(course.facultyName, course.faculty, course.teacher, course.staff);
-  const facultyId = firstValue(course.facultyId, course.staffId);
-  const category = firstValue(course.category, course.courseCategory);
-
-  return (
-    <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#0ea5e9]/40 hover:shadow-md">
-      
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#0ea5e9]/10 text-lg font-black text-[#0ea5e9]">
-        {index + 1}
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h3 className="break-words text-base font-black text-[#1e3a8a] leading-snug" title={clean(courseName)}>
-              {displayValue(courseName)}
-            </h3>
-            <p className="mt-1 font-mono text-[11px] font-black tracking-wider text-slate-400">
-              {displayValue(courseCode)}
-            </p>
-          </div>
-          {category && (
-            <span className="w-fit shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 border border-slate-200">
-              {displayValue(category)}
-            </span>
-          )}
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Credits</p>
-            <p className="mt-0.5 text-xs font-bold text-slate-700">{displayValue(credits)}</p>
-          </div>
-          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Faculty</p>
-            <p className="mt-0.5 text-xs font-bold text-slate-700 line-clamp-1" title={clean(faculty)}>{displayValue(faculty)}</p>
-          </div>
-          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Faculty ID</p>
-            <p className="mt-0.5 font-mono text-[11px] font-bold text-[#0ea5e9] truncate">{displayValue(facultyId)}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// =====================================================
-// MAIN PROFILE COMPONENT
+// MAIN PROFILE
 // =====================================================
 
 export default function Profile() {
   const { user, setUser } = useAuth();
+  
   const [profile, setProfile] = useState(normalizeProfile(user || {}));
   const [bucket, setBucket] = useState("");
   const [courses, setCourses] = useState([]);
-  
+
   const [form, setForm] = useState({
     smsEnabled: user?.smsEnabled ?? true,
     notificationsEnabled: user?.notificationsEnabled ?? true,
@@ -240,6 +360,7 @@ export default function Profile() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -249,46 +370,39 @@ export default function Profile() {
       setError("");
 
       const profileResponse = await getProfile();
-      const rawProfile = profileResponse?.data && typeof profileResponse.data === "object" && !Array.isArray(profileResponse.data) ? profileResponse.data : profileResponse || {};
+      const rawProfile = extractProfileObject(profileResponse);
+      const databaseProfile = normalizeProfile(rawProfile);
 
       let academicDetails = null;
+
       try {
         academicDetails = await syncStudentAcademicDetails();
       } catch (amsError) {
-        // Silently catch 502/sync errors so the console doesn't get flooded.
-        // We will just fall back to whatever is cached or empty.
+        console.warn("AMS academic details could not be loaded:", amsError);
+        academicDetails = null;
       }
 
-      const academicRoot = academicDetails?.data && typeof academicDetails.data === "object" && !Array.isArray(academicDetails.data)
-        ? { ...academicDetails, ...academicDetails.data }
-        : academicDetails || {};
+      const academicRoot = isObject(academicDetails?.data) ? academicDetails.data : (isObject(academicDetails) ? academicDetails : {});
+      const finalProfile = normalizeProfile(databaseProfile, academicRoot);
+      const academicCourses = extractCourses(academicRoot);
+      const academicBucket = extractBucket(academicRoot);
 
-      const academicProfile = academicRoot?.profile && typeof academicRoot.profile === "object" ? academicRoot.profile : {};
-
-      const academicCourses = Array.isArray(academicRoot?.courses) ? academicRoot.courses 
-        : Array.isArray(academicRoot?.registeredCourses) ? academicRoot.registeredCourses 
-        : Array.isArray(academicRoot?.registeredSubjects) ? academicRoot.registeredSubjects 
-        : [];
-
-      const academicBucket = firstValue(academicRoot?.bucket, academicRoot?.yourBucket, academicRoot?.your_bucket, academicProfile?.bucket, academicProfile?.yourBucket, academicProfile?.your_bucket);
-
-      const profileData = normalizeProfile({ ...rawProfile, ...academicRoot }, academicProfile);
-
-      setProfile(profileData);
-      setBucket(academicBucket);
-      setCourses(academicCourses);
+      setProfile(finalProfile);
+      setBucket(clean(academicBucket));
+      setCourses(Array.isArray(academicCourses) ? academicCourses : []);
+      
       setForm({
-        smsEnabled: profileData.smsEnabled,
-        notificationsEnabled: profileData.notificationsEnabled,
+        smsEnabled: typeof finalProfile.smsEnabled === "boolean" ? finalProfile.smsEnabled : true,
+        notificationsEnabled: typeof finalProfile.notificationsEnabled === "boolean" ? finalProfile.notificationsEnabled : true,
       });
 
       if (typeof setUser === "function") {
-        setUser(profileData);
+        setUser(finalProfile);
       }
-      localStorage.setItem("user", JSON.stringify(profileData));
+      localStorage.setItem("user", JSON.stringify(finalProfile));
     } catch (err) {
-      // Use silent error handling
-      setError(err?.response?.data?.detail || err?.response?.data?.message || "Unable to load your profile.");
+      console.error("Profile loading failed:", err);
+      setError(err?.response?.data?.detail || err?.response?.data?.message || err?.message || "Unable to load your profile.");
     } finally {
       setLoading(false);
     }
@@ -305,6 +419,39 @@ export default function Profile() {
     setForm((current) => ({ ...current, [name]: checked }));
   };
 
+  const handleSync = async () => {
+    try {
+      setSyncing(true);
+      setError("");
+      setSuccess("");
+      
+      const academicDetails = await syncStudentAcademicDetails();
+      
+      const academicRoot = isObject(academicDetails?.data) ? academicDetails.data : (isObject(academicDetails) ? academicDetails : {});
+      const academicCourses = extractCourses(academicRoot);
+      const academicBucket = extractBucket(academicRoot);
+      
+      const updatedProfile = normalizeProfile(profile, academicRoot);
+
+      setProfile(updatedProfile);
+      setBucket(clean(academicBucket));
+      setCourses(Array.isArray(academicCourses) ? academicCourses : []);
+
+      if (typeof setUser === "function") {
+        setUser(updatedProfile);
+      }
+      localStorage.setItem("user", JSON.stringify(updatedProfile));
+
+      setSuccess("Portal data synchronized successfully.");
+      window.setTimeout(() => setSuccess(""), 4000);
+    } catch (err) {
+      console.error("Portal sync failed:", err);
+      setError(err?.response?.data?.detail || err?.response?.data?.message || "Unable to synchronize portal data.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     try {
@@ -317,13 +464,13 @@ export default function Profile() {
         notificationsEnabled: Boolean(form.notificationsEnabled),
       });
 
-      const responseData = response?.data && typeof response.data === "object" ? response.data : response || {};
+      const updatedRaw = extractProfileObject(response);
 
       const updatedProfile = normalizeProfile({
         ...profile,
-        ...responseData,
-        smsEnabled: responseData.smsEnabled ?? form.smsEnabled,
-        notificationsEnabled: responseData.notificationsEnabled ?? form.notificationsEnabled,
+        ...updatedRaw,
+        smsEnabled: typeof updatedRaw.smsEnabled === "boolean" ? updatedRaw.smsEnabled : Boolean(form.smsEnabled),
+        notificationsEnabled: typeof updatedRaw.notificationsEnabled === "boolean" ? updatedRaw.notificationsEnabled : Boolean(form.notificationsEnabled),
       });
 
       setProfile(updatedProfile);
@@ -335,7 +482,7 @@ export default function Profile() {
       setSuccess("Notification preferences saved successfully.");
       window.setTimeout(() => setSuccess(""), 4000);
     } catch (err) {
-      setError(err?.response?.data?.detail || err?.response?.data?.message || "Unable to update your preferences.");
+      setError(err?.response?.data?.detail || err?.response?.data?.message || err?.message || "Unable to update your preferences.");
     } finally {
       setSaving(false);
     }
@@ -348,9 +495,9 @@ export default function Profile() {
   const displayUser = profile || user || {};
 
   return (
-    <div className="min-h-[calc(100vh-72px)] bg-slate-50/80 p-4 sm:p-6 lg:p-8 xl:p-10">
+    <div className="min-h-[calc(100vh-72px)] bg-transparent p-4 sm:p-6 lg:p-8 xl:p-10 overflow-hidden">
 
-      {/* INJECT ANIMATIONS & WAVE KEYFRAMES */}
+      {/* INJECT ANIMATIONS & CUSTOM KEYFRAMES */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes fadeInSlideUp {
           from { opacity: 0; transform: translateY(20px); }
@@ -364,11 +511,33 @@ export default function Profile() {
           100% { transform: translateX(-50%); }
         }
         .animate-wave {
-          animation: wave-animation 15s linear infinite;
+          animation: wave-animation 12s linear infinite;
         }
         .animate-wave-slow {
           animation: wave-animation 20s linear infinite;
         }
+        @keyframes float-up {
+          0% { transform: translateY(80px) scale(0.6); opacity: 0; }
+          20% { opacity: 0.8; }
+          80% { opacity: 0.5; }
+          100% { transform: translateY(-200px) scale(1.4); opacity: 0; }
+        }
+        @keyframes smoke-drift {
+          0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.15; }
+          50% { transform: translate(40px, -30px) scale(1.1); opacity: 0.35; }
+        }
+        @keyframes wave-front {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        @keyframes wave-back {
+          0% { transform: translateX(-50%); }
+          100% { transform: translateX(0); }
+        }
+        .custom-timetable-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-timetable-scroll::-webkit-scrollbar-track { background: #f8fafc; border-radius: 8px; }
+        .custom-timetable-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+        .custom-timetable-scroll:hover::-webkit-scrollbar-thumb { background: #94a3b8; }
       `}} />
 
       <div className="mx-auto max-w-[1400px]">
@@ -376,16 +545,27 @@ export default function Profile() {
         {/* ================================================= */}
         {/* HEADER */}
         {/* ================================================= */}
-        <div className="mb-6 lg:mb-10 opacity-0 animate-fade-slide-up" style={{ animationDelay: '0ms' }}>
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-[#0ea5e9]">
-            Student Account
-          </p>
-          <h1 className="mt-1.5 text-3xl font-black tracking-tight text-[#1e3a8a] sm:text-4xl lg:text-5xl">
-            My Profile
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
-            Manage your identity, academic details, and portal configurations.
-          </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6 lg:mb-10 opacity-0 animate-fade-slide-up" style={{ animationDelay: '0ms' }}>
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#0ea5e9]">
+              Student Account
+            </p>
+            <h1 className="mt-1.5 text-3xl font-black tracking-tight text-[#1e3a8a] sm:text-4xl lg:text-5xl">
+              My Profile
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
+              Manage your identity, academic details, and portal configurations.
+            </p>
+          </div>
+          
+          <button
+            type="button"
+            onClick={handleSync}
+            disabled={syncing}
+            className="rounded-xl bg-[#0ea5e9] px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-[#0284c7] disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {syncing ? "Synchronizing..." : "Sync Portal"}
+          </button>
         </div>
 
         {/* ALERTS */}
@@ -401,28 +581,45 @@ export default function Profile() {
         )}
 
         {/* ================================================= */}
-        {/* PROFILE HERO (Premium Gradient Banner with Waves) */}
+        {/* PROFILE HERO (TALL WAVES, SMOKE & BUBBLES) */}
         {/* ================================================= */}
-        <div className="mb-8 relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[#1e3a8a] to-[#0ea5e9] shadow-xl shadow-[#1e3a8a]/20 opacity-0 animate-fade-slide-up" style={{ animationDelay: '100ms' }}>
+        <div className="mb-8 relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[#1e3a8a] via-[#172554] to-[#0ea5e9] shadow-xl shadow-[#1e3a8a]/20 opacity-0 animate-fade-slide-up" style={{ animationDelay: '100ms' }}>
           
-          {/* Animated Background Waves */}
-          <div className="absolute bottom-0 left-0 right-0 w-[200%] h-32 text-white opacity-20 pointer-events-none z-0">
-            <svg className="absolute bottom-0 animate-wave-slow" viewBox="0 0 1200 120" preserveAspectRatio="none" fill="currentColor">
-              <path d="M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,52.47V0Z" opacity=".25" />
-              <path d="M0,0V15.81C13,36.92,27.64,56.86,47.69,72.05,99.41,111.27,165,111,224.58,91.58c31.15-10.15,60.09-26.07,89.67-39.8,40.92-19,84.73-46,130.83-49.67,36.26-2.85,70.9,9.42,98.6,31.56,31.77,25.39,62.32,62,103.63,73,40.44,10.79,81.35-6.69,119.13-24.28s75.16-39,116.92-43.05c59.73-5.85,113.28,22.88,168.9,38.84,30.2,8.66,59,6.17,87.09-7.5V0Z" opacity=".5" />
-              <path d="M0,0V5.63C149.93,59,314.09,71.32,475.83,42.57c43-7.64,84.23-20.12,127.61-26.46,59-8.63,112.48,12.24,165.56,35.4C827.93,77.22,886,95.24,951.2,90c86.53-7,172.46-45.71,248.8-84.81V0Z" />
+          {/* SMOKE EFFECTS */}
+          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+            <div className="absolute -top-10 -left-20 h-64 w-64 rounded-full bg-white/20 blur-[60px] animate-[smoke-drift_10s_ease-in-out_infinite]" />
+            <div className="absolute top-1/4 -right-10 h-72 w-72 rounded-full bg-[#0ea5e9]/30 blur-[70px] animate-[smoke-drift_12s_ease-in-out_infinite_reverse]" />
+          </div>
+
+          {/* TALL ANIMATED WAVES (Reaches above middle) */}
+          <div className="absolute bottom-0 left-0 right-0 w-[200%] h-[75%] sm:h-[80%] text-white pointer-events-none z-0 flex items-end">
+            <svg className="absolute bottom-0 w-full h-full animate-[wave-front_14s_linear_infinite]" viewBox="0 0 1200 150" preserveAspectRatio="none" fill="currentColor">
+              <path d="M0,60 C150,150 350,0 600,60 C850,120 1050,0 1200,60 L1200,150 L0,150 Z" opacity=".1" />
             </svg>
-            <svg className="absolute bottom-0 animate-wave" viewBox="0 0 1200 120" preserveAspectRatio="none" fill="currentColor">
-              <path d="M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,52.47V0Z" opacity=".25" />
+            <svg className="absolute bottom-0 w-full h-[85%] animate-[wave-back_18s_linear_infinite]" viewBox="0 0 1200 150" preserveAspectRatio="none" fill="currentColor">
+              <path d="M0,80 C200,20 400,140 600,80 C800,20 1000,140 1200,80 L1200,150 L0,150 Z" opacity=".15" />
             </svg>
+            <svg className="absolute bottom-0 w-full h-[70%] animate-[wave-front_22s_linear_infinite]" viewBox="0 0 1200 150" preserveAspectRatio="none" fill="currentColor">
+              <path d="M0,100 C250,180 450,40 700,100 C900,160 1100,40 1200,100 L1200,150 L0,150 Z" opacity=".2" />
+            </svg>
+          </div>
+
+          {/* WATER BUBBLES */}
+          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+            <div className="absolute bottom-[-10px] left-[12%] h-4 w-4 rounded-full bg-white/40 blur-[1px] animate-[float-up_4s_ease-in-out_infinite]" />
+            <div className="absolute bottom-[-20px] left-[28%] h-6 w-6 rounded-full bg-white/30 blur-[2px] animate-[float-up_6s_ease-in-out_infinite]" style={{animationDelay: '1.5s'}} />
+            <div className="absolute bottom-[-5px] left-[45%] h-3 w-3 rounded-full bg-white/50 blur-[0.5px] animate-[float-up_5s_ease-in-out_infinite]" style={{animationDelay: '3s'}} />
+            <div className="absolute bottom-[-15px] left-[65%] h-7 w-7 rounded-full bg-white/20 blur-[1px] animate-[float-up_7s_ease-in-out_infinite]" style={{animationDelay: '0.8s'}} />
+            <div className="absolute bottom-[-25px] left-[85%] h-5 w-5 rounded-full bg-white/40 blur-[1.5px] animate-[float-up_5.5s_ease-in-out_infinite]" style={{animationDelay: '2.5s'}} />
           </div>
 
           <div className="absolute inset-0 bg-white/5 mix-blend-overlay pointer-events-none z-0" />
           
+          {/* HERO CONTENT */}
           <div className="relative z-10 p-6 sm:p-10 flex flex-col gap-6 md:flex-row md:items-center">
             
             {/* PHOTO */}
-            <div className="shrink-0 relative">
+            <div className="shrink-0 relative mx-auto md:mx-0">
               <div className="absolute inset-0 rounded-[28px] bg-white/20 blur-md" />
               {displayUser.photoUrl ? (
                 <img
@@ -438,8 +635,8 @@ export default function Profile() {
             </div>
 
             {/* NAME & PRIMARY INFO */}
-            <div className="min-w-0 flex-1 text-white">
-              <div className="flex flex-wrap items-center gap-3">
+            <div className="min-w-0 flex-1 text-white text-center md:text-left">
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
                 <h2 className="break-words text-3xl sm:text-4xl font-black tracking-tight drop-shadow-sm">
                   {displayValue(displayUser.name)}
                 </h2>
@@ -453,12 +650,12 @@ export default function Profile() {
                 </span>
               </div>
 
-              <p className="mt-2 break-all text-sm font-semibold text-white/80">
+              <p className="mt-2 break-all text-sm font-semibold text-white/90">
                 {displayValue(displayUser.email)}
               </p>
 
               {/* Quick Detail Pills */}
-              <div className="mt-5 flex flex-wrap gap-3">
+              <div className="mt-5 flex flex-wrap justify-center md:justify-start gap-3">
                 <div className="flex items-center gap-2 rounded-xl bg-white/10 backdrop-blur-md px-4 py-2 border border-white/20">
                   <span className="text-[10px] font-black uppercase tracking-widest text-white/60">VTU</span>
                   <span className="font-mono text-sm font-bold text-white">{displayValue(displayUser.vtuNumber)}</span>
@@ -521,7 +718,7 @@ export default function Profile() {
             </div>
           </section>
 
-          {/* COURSE REGISTERED DETAILS */}
+          {/* COURSE REGISTERED DETAILS (Responsive FIXED Table, No Horizontal Scroll on Mobile) */}
           <Section title="Course Registered Details" description={`Currently registered inside AMS • ${courses.length} ${courses.length === 1 ? "course" : "courses"}`} delay={400}>
             {courses.length === 0 ? (
               <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 p-10 text-center">
@@ -529,10 +726,49 @@ export default function Profile() {
                 <p className="mt-1 text-xs font-medium text-slate-500">Please synchronize your AMS information to load courses.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {courses.map((course, index) => (
-                  <CourseCard key={course.courseCode || course.subjectCode || `${index}-${course.courseName}`} course={course} index={index} />
-                ))}
+              <div className="w-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+                <table className="w-full text-left table-fixed">
+                  <thead className="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                      <th className="px-1 py-3 sm:px-6 sm:py-4 text-[6px] sm:text-[11px] font-black uppercase tracking-widest text-slate-500 w-[5%] sm:w-auto text-center">#</th>
+                      <th className="px-1 py-3 sm:px-6 sm:py-4 text-[6px] sm:text-[11px] font-black uppercase tracking-widest text-slate-500 w-[12%] sm:w-auto text-center"><span className="sm:hidden">Cat</span><span className="hidden sm:inline">Category</span></th>
+                      <th className="px-1 py-3 sm:px-6 sm:py-4 text-[6px] sm:text-[11px] font-black uppercase tracking-widest text-slate-500 w-[16%] sm:w-auto">Code</th>
+                      <th className="px-1 py-3 sm:px-6 sm:py-4 text-[6px] sm:text-[11px] font-black uppercase tracking-widest text-slate-500 w-[27%] sm:w-auto">Course Name</th>
+                      <th className="px-1 py-3 sm:px-6 sm:py-4 text-[6px] sm:text-[11px] font-black uppercase tracking-widest text-slate-500 w-[6%] sm:w-auto text-center"><span className="sm:hidden">Cr</span><span className="hidden sm:inline">Credits</span></th>
+                      <th className="px-1 py-3 sm:px-6 sm:py-4 text-[6px] sm:text-[11px] font-black uppercase tracking-widest text-slate-500 w-[14%] sm:w-auto">Faculty</th>
+                      <th className="px-1 py-3 sm:px-6 sm:py-4 text-[6px] sm:text-[11px] font-black uppercase tracking-widest text-slate-500 w-[8%] sm:w-auto">Slot</th>
+                      <th className="px-1 py-3 sm:px-6 sm:py-4 text-[6px] sm:text-[11px] font-black uppercase tracking-widest text-slate-500 w-[12%] sm:w-auto">Room</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {courses.map((course, index) => {
+                      const courseName = getCourseName(course);
+                      const courseCode = getCourseCode(course);
+                      const credits = getCourseCredits(course);
+                      const faculty = getCourseFaculty(course);
+                      const category = getCourseCategory(course);
+                      const room = getCourseRoom(course);
+                      const slot = getCourseSlot(course);
+
+                      return (
+                        <tr key={course?._id || course?.id || courseCode || index} className="transition-colors hover:bg-slate-50/60">
+                          <td className="px-1 py-3 sm:px-6 sm:py-4 text-[8px] sm:text-xs font-bold text-slate-500 text-center">{index + 1}</td>
+                          <td className="px-1 py-3 sm:px-6 sm:py-4 text-[7px] sm:text-xs font-bold text-slate-700 text-center break-words leading-tight">{displayValue(category)}</td>
+                          <td className="px-1 py-3 sm:px-6 sm:py-4 font-mono text-[7px] sm:text-xs font-black text-[#0ea5e9] break-words">{displayValue(courseCode)}</td>
+                          <td className="px-1 py-3 sm:px-6 sm:py-4 text-[8px] sm:text-xs font-black text-[#1e3a8a] break-words leading-tight">
+                            <div className="line-clamp-3 sm:line-clamp-none" title={clean(courseName)}>{displayValue(courseName)}</div>
+                          </td>
+                          <td className="px-1 py-3 sm:px-6 sm:py-4 text-[8px] sm:text-xs font-bold text-slate-600 text-center">{displayValue(credits)}</td>
+                          <td className="px-1 py-3 sm:px-6 sm:py-4 text-[7px] sm:text-xs font-semibold text-slate-700 break-words leading-tight">
+                            <div className="line-clamp-2 sm:line-clamp-none" title={clean(faculty)}>{displayValue(faculty)}</div>
+                          </td>
+                          <td className="px-1 py-3 sm:px-6 sm:py-4 text-[7px] sm:text-xs font-black text-[#0ea5e9] break-words">{displayValue(slot)}</td>
+                          <td className="px-1 py-3 sm:px-6 sm:py-4 text-[7px] sm:text-xs font-bold text-slate-600 break-words">{displayValue(room)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </Section>
@@ -550,7 +786,6 @@ export default function Profile() {
           </Section>
 
           <div className="grid gap-6 lg:gap-8 lg:grid-cols-2">
-            
             {/* CONTACT DETAILS */}
             <Section title="Contact Details" description="Your registered communication info." delay={600}>
               <div className="grid gap-4">
@@ -583,7 +818,6 @@ export default function Profile() {
           </Section>
 
           <div className="grid gap-6 lg:gap-8 lg:grid-cols-2">
-            
             {/* ACCOUNT STATUS */}
             <Section title="Account Status" description="Your UniEve AI integration info." delay={900}>
               <div className="grid gap-4">
@@ -607,7 +841,6 @@ export default function Profile() {
           {/* NOTIFICATION PREFERENCES */}
           <Section title="Notification Preferences" description="Choose how UniEve AI alerts you." delay={1100}>
             <form onSubmit={handleSubmit} className="space-y-4">
-              
               {/* SMS */}
               <label className="flex cursor-pointer items-center justify-between gap-5 rounded-2xl border border-slate-200 bg-white p-5 transition-all hover:border-[#0ea5e9]/30 hover:bg-[#0ea5e9]/5 hover:shadow-md">
                 <div>

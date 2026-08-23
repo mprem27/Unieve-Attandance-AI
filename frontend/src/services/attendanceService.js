@@ -76,35 +76,178 @@ const toArray = (data, possibleKeys = []) => {
 };
 
 // =====================================================
-// DEBUG HELPER
+// DATE HELPERS
+// =====================================================
+//
+// These helpers are only used as a fallback for
+// Today's Attendance.
+//
+// Existing attendance API functions are preserved.
 // =====================================================
 
-const logAttendanceResponse = (
-  label,
-  responseData,
-  parsedData
+const getTodayDate = () => {
+  const today = new Date();
+
+  const year =
+    today.getFullYear();
+
+  const month = String(
+    today.getMonth() + 1
+  ).padStart(2, "0");
+
+  const day = String(
+    today.getDate()
+  ).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+// =====================================================
+// NORMALIZE ATTENDANCE DATE
+// =====================================================
+
+const normalizeAttendanceDate = (
+  value
 ) => {
-  console.log(
-    `[Attendance Service] ${label} raw response:`,
-    responseData
+  if (
+    value === undefined ||
+    value === null
+  ) {
+    return "";
+  }
+
+  const text = String(value).trim();
+
+  if (!text) {
+    return "";
+  }
+
+  // ---------------------------------------------------
+  // YYYY-MM-DD
+  // ---------------------------------------------------
+
+  const isoMatch = text.match(
+    /^(\d{4})-(\d{2})-(\d{2})/
   );
 
-  console.log(
-    `[Attendance Service] ${label} parsed records:`,
-    parsedData
-  );
-
-  console.log(
-    `[Attendance Service] ${label} record count:`,
-    parsedData.length
-  );
-
-  if (parsedData.length > 0) {
-    console.log(
-      `[Attendance Service] ${label} first record:`,
-      parsedData[0]
+  if (isoMatch) {
+    return (
+      `${isoMatch[1]}-` +
+      `${isoMatch[2]}-` +
+      `${isoMatch[3]}`
     );
   }
+
+  // ---------------------------------------------------
+  // YYYY/MM/DD
+  // ---------------------------------------------------
+
+  const ymdSlash = text.match(
+    /^(\d{4})\/(\d{2})\/(\d{2})$/
+  );
+
+  if (ymdSlash) {
+    return (
+      `${ymdSlash[1]}-` +
+      `${ymdSlash[2]}-` +
+      `${ymdSlash[3]}`
+    );
+  }
+
+  // ---------------------------------------------------
+  // DD-MM-YYYY
+  // ---------------------------------------------------
+
+  const dmyDash = text.match(
+    /^(\d{2})-(\d{2})-(\d{4})$/
+  );
+
+  if (dmyDash) {
+    return (
+      `${dmyDash[3]}-` +
+      `${dmyDash[2]}-` +
+      `${dmyDash[1]}`
+    );
+  }
+
+  // ---------------------------------------------------
+  // DD/MM/YYYY
+  // ---------------------------------------------------
+
+  const dmySlash = text.match(
+    /^(\d{2})\/(\d{2})\/(\d{4})$/
+  );
+
+  if (dmySlash) {
+    return (
+      `${dmySlash[3]}-` +
+      `${dmySlash[2]}-` +
+      `${dmySlash[1]}`
+    );
+  }
+
+  // ---------------------------------------------------
+  // ISO DATETIME
+  // ---------------------------------------------------
+
+  if (text.includes("T")) {
+    return text.substring(0, 10);
+  }
+
+  return text;
+};
+
+// =====================================================
+// GET ATTENDANCE RECORD DATE
+// =====================================================
+
+const getAttendanceRecordDate = (
+  record
+) => {
+  if (
+    !record ||
+    typeof record !== "object"
+  ) {
+    return "";
+  }
+
+  const value =
+    record.date ??
+    record.attendanceDate ??
+    record.attendance_date ??
+    record.attendedDate ??
+    record.attended_date ??
+    record.classDate ??
+    record.class_date ??
+    "";
+
+  return normalizeAttendanceDate(
+    value
+  );
+};
+
+// =====================================================
+// FILTER TODAY'S RECORDS
+// =====================================================
+
+const filterTodayRecords = (
+  records
+) => {
+  if (!Array.isArray(records)) {
+    return [];
+  }
+
+  const today = getTodayDate();
+
+  return records.filter(
+    (record) => {
+      return (
+        getAttendanceRecordDate(
+          record
+        ) === today
+      );
+    }
+  );
 };
 
 // =====================================================
@@ -127,16 +270,6 @@ export const getAttendance = async () => {
     ]
   );
 
-  // ---------------------------------------------------
-  // Debug
-  // ---------------------------------------------------
-
-  logAttendanceResponse(
-    "MAIN ATTENDANCE",
-    response.data,
-    records
-  );
-
   return records;
 };
 
@@ -147,6 +280,11 @@ export const getAttendance = async () => {
 export const getTodayAttendance =
   async () => {
     try {
+      // -------------------------------------------------
+      // FIRST:
+      // Use the dedicated today's endpoint.
+      // -------------------------------------------------
+
       const response =
         await api.get(
           "/attendance/today"
@@ -164,31 +302,75 @@ export const getTodayAttendance =
           ]
         );
 
-      // ---------------------------------------------
-      // Debug
-      // ---------------------------------------------
+      // -------------------------------------------------
+      // If today's endpoint has records,
+      // return them immediately.
+      // -------------------------------------------------
 
-      logAttendanceResponse(
-        "TODAY ATTENDANCE",
-        response.data,
-        records
+      if (records.length > 0) {
+        return records;
+      }
+
+      // -------------------------------------------------
+      // FALLBACK:
+      // Fetch the main attendance records.
+      // -------------------------------------------------
+
+      const attendanceResponse =
+        await api.get(
+          "/attendance"
+        );
+
+      const allRecords =
+        toArray(
+          attendanceResponse.data,
+          [
+            "attendance",
+            "records",
+            "items",
+            "data",
+            "results",
+          ]
+        );
+
+      // -------------------------------------------------
+      // Filter main attendance using today's date.
+      // -------------------------------------------------
+
+      return filterTodayRecords(
+        allRecords
       );
 
-      return records;
     } catch (error) {
-      const status =
-        error?.response?.status;
+      // -------------------------------------------------
+      // If /today fails completely,
+      // try the main attendance endpoint.
+      // -------------------------------------------------
 
-      console.warn(
-        `Today's attendance request failed${
-          status
-            ? ` (${status})`
-            : ""
-        }:`,
-        error
-      );
+      try {
+        const response =
+          await api.get(
+            "/attendance"
+          );
 
-      return [];
+        const allRecords =
+          toArray(
+            response.data,
+            [
+              "attendance",
+              "records",
+              "items",
+              "data",
+              "results",
+            ]
+          );
+
+        return filterTodayRecords(
+          allRecords
+        );
+      } catch (fallbackError) {
+        return [];
+      }
     }
   };
 
@@ -217,30 +399,8 @@ export const getAttendanceSummary =
           ]
         );
 
-      // ---------------------------------------------
-      // Debug
-      // ---------------------------------------------
-
-      logAttendanceResponse(
-        "ATTENDANCE SUMMARY",
-        response.data,
-        records
-      );
-
       return records;
     } catch (error) {
-      const status =
-        error?.response?.status;
-
-      console.warn(
-        `Attendance summary request failed${
-          status
-            ? ` (${status})`
-            : ""
-        }:`,
-        error
-      );
-
       return [];
     }
   };
@@ -270,30 +430,8 @@ export const getAttendanceChanges =
           ]
         );
 
-      // ---------------------------------------------
-      // Debug
-      // ---------------------------------------------
-
-      logAttendanceResponse(
-        "ATTENDANCE CHANGES",
-        response.data,
-        records
-      );
-
       return records;
     } catch (error) {
-      const status =
-        error?.response?.status;
-
-      console.warn(
-        `Attendance changes request failed${
-          status
-            ? ` (${status})`
-            : ""
-        }:`,
-        error
-      );
-
       return [];
     }
   };
@@ -316,9 +454,13 @@ export const getSubjectDetails =
           subjectId
         )}`
       );
+
     return response.data;
   };
 
+// =====================================================
+// GET ATTENDANCE DASHBOARD DATA
+// =====================================================
 
 export const getAttendanceDashboardData =
   async () => {
@@ -378,6 +520,10 @@ export const getAttendanceDashboardData =
         .filter(Boolean),
     };
   };
+
+// =====================================================
+// DEFAULT EXPORT
+// =====================================================
 
 export default {
   getAttendance,

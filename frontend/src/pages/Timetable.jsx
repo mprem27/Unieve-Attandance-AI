@@ -354,14 +354,22 @@ function MatrixClassCard({ item }) {
   const room = getRoom(item);
 
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center rounded-md sm:rounded-2xl border border-white/40 bg-white/40 p-0.5 sm:p-2.5 shadow-sm transition-all hover:scale-105 hover:bg-white/60 hover:shadow-md">
+    <div className="flex h-full w-full min-w-0 flex-col items-center justify-center rounded-md sm:rounded-2xl border border-white/40 bg-white/40 p-0.5 sm:p-2.5 shadow-sm transition-all hover:scale-105 hover:bg-white/60 hover:shadow-md">
       
-      {/* Mobile view: Extremely condensed */}
-      <span className="block sm:hidden text-[7px] font-black uppercase tracking-tighter text-[#1e3a8a] text-center leading-tight line-clamp-2">
-        {code || subject.substring(0, 6)}
+      {/* Mobile view */}
+      <span
+        className="block sm:hidden w-full overflow-hidden text-[6px] font-black uppercase tracking-tighter text-[#1e3a8a] text-center leading-tight line-clamp-3 break-words"
+        title={clean(subject)}
+      >
+        {displayValue(subject)}
       </span>
+      {code && (
+        <span className="block sm:hidden mt-0.5 w-full overflow-hidden text-[5px] font-bold text-[#0ea5e9] truncate text-center">
+          {code}
+        </span>
+      )}
       {room && (
-        <span className="block sm:hidden mt-0.5 text-[5px] font-bold text-[#0ea5e9] truncate w-full text-center">
+        <span className="block sm:hidden mt-0.5 w-full overflow-hidden text-[5px] font-bold text-[#0ea5e9] truncate text-center">
           {room}
         </span>
       )}
@@ -697,39 +705,51 @@ export default function Timetable() {
                 </table>
               </div>
 
-              {/* MOBILE STACKED CARDS (No horizontal scroll) */}
-              <div className="grid gap-3 p-4 lg:hidden sm:grid-cols-2 bg-white/10">
-                {courses.map((course, index) => (
-                  <div key={course?._id || course?.id || index} className="flex flex-col rounded-2xl border border-white/50 bg-white/40 backdrop-blur-sm p-4 shadow-sm">
-                    <div className="mb-3 flex items-start justify-between border-b border-white/50 pb-3">
-                      <div className="pr-3">
-                        <p className="font-black text-[#1e3a8a] leading-snug">{displayValue(getSubjectName(course))}</p>
-                        <p className="mt-1 font-mono text-[10px] font-black uppercase text-[#0ea5e9]">{displayValue(getSubjectCode(course))}</p>
-                      </div>
-                      <span className="shrink-0 rounded-lg bg-white/60 border border-white/70 px-2 py-1 text-[8px] font-black uppercase tracking-wider text-[#0ea5e9] shadow-sm">
-                        {displayValue(getCategory(course))}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-xs">
-                      <div className="bg-white/30 p-2 rounded-xl">
-                        <span className="block text-[9px] font-black uppercase tracking-widest text-slate-500">Faculty</span>
-                        <span className="mt-0.5 block font-bold text-slate-700 line-clamp-1">{displayValue(getFaculty(course))}</span>
-                      </div>
-                      <div className="bg-white/30 p-2 rounded-xl">
-                        <span className="block text-[9px] font-black uppercase tracking-widest text-slate-500">Room</span>
-                        <span className="mt-0.5 block font-bold text-slate-700 truncate">{displayValue(getRoom(course))}</span>
-                      </div>
-                      <div className="bg-white/30 p-2 rounded-xl">
-                        <span className="block text-[9px] font-black uppercase tracking-widest text-slate-500">Slot</span>
-                        <span className="mt-0.5 block font-black text-[#0ea5e9] truncate">{displayValue(getSlot(course))}</span>
-                      </div>
-                      <div className="bg-white/30 p-2 rounded-xl">
-                        <span className="block text-[9px] font-black uppercase tracking-widest text-slate-500">Credits</span>
-                        <span className="mt-0.5 block font-bold text-slate-700">{displayValue(getCredit(course))}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              {/* MOBILE TABLE - FITS VIEWPORT WITHOUT HORIZONTAL SCROLL */}
+              <div className="lg:hidden w-full overflow-hidden">
+                <table className="w-full table-fixed text-left">
+                  <thead className="bg-white/30 border-b border-white/40">
+                    <tr>
+                      <th className="w-[6%] px-1 py-3 text-center text-[8px] font-black uppercase text-slate-500">#</th>
+                      <th className="w-[17%] px-1 py-3 text-[8px] font-black uppercase text-slate-500">Code</th>
+                      <th className="w-[28%] px-1 py-3 text-[8px] font-black uppercase text-slate-500">Course</th>
+                      <th className="w-[10%] px-1 py-3 text-[8px] font-black uppercase text-slate-500">Cr.</th>
+                      <th className="w-[18%] px-1 py-3 text-[8px] font-black uppercase text-slate-500">Faculty</th>
+                      <th className="w-[10%] px-1 py-3 text-[8px] font-black uppercase text-slate-500">Slot</th>
+                      <th className="w-[11%] px-1 py-3 text-[8px] font-black uppercase text-slate-500">Room</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/30">
+                    {courses.map((course, index) => (
+                      <tr
+                        key={course?._id || course?.id || getSubjectCode(course) || index}
+                        className="hover:bg-white/40"
+                      >
+                        <td className="px-1 py-3 text-center text-[8px] font-bold text-slate-500">
+                          {index + 1}
+                        </td>
+                        <td className="px-1 py-3 text-[8px] font-black text-[#0ea5e9] break-words">
+                          {displayValue(getSubjectCode(course))}
+                        </td>
+                        <td className="px-1 py-3 text-[8px] font-black leading-tight text-[#1e3a8a] break-words">
+                          {displayValue(getSubjectName(course))}
+                        </td>
+                        <td className="px-1 py-3 text-center text-[8px] font-bold text-slate-600">
+                          {displayValue(getCredit(course))}
+                        </td>
+                        <td className="px-1 py-3 text-[8px] font-semibold leading-tight text-slate-700 break-words">
+                          {displayValue(getFaculty(course))}
+                        </td>
+                        <td className="px-1 py-3 text-[8px] font-black text-[#0ea5e9] break-words">
+                          {displayValue(getSlot(course))}
+                        </td>
+                        <td className="px-1 py-3 text-[8px] font-bold text-slate-600 break-words">
+                          {displayValue(getRoom(course))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </>
           )}
@@ -760,10 +780,10 @@ export default function Timetable() {
               
               {/* HEADER ROW */}
               <div 
-                className="grid border-y border-white/40 bg-white/30 backdrop-blur-sm"
+                className="grid h-[50px] sm:h-[70px] overflow-hidden border-y border-white/40 bg-white/30 backdrop-blur-sm"
                 style={{ gridTemplateColumns: "minmax(35px, 1.2fr) repeat(8, minmax(0, 1fr))" }}
               >
-                <div className="flex min-h-[40px] sm:min-h-[70px] items-center justify-center border-r border-white/40 px-1 sm:px-3 bg-white/10">
+                <div className="flex h-[50px] sm:h-[70px] items-center justify-center border-r border-white/40 px-1 sm:px-3 bg-white/10">
                   <span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500">Day</span>
                 </div>
                 
@@ -779,10 +799,10 @@ export default function Timetable() {
               {DAYS.map((day) => (
                 <div 
                   key={day} 
-                  className="grid border-b border-white/40 bg-white/20 hover:bg-white/40 transition-colors"
+                  className="grid h-[50px] sm:h-[140px] overflow-hidden border-b border-white/40 bg-white/20 hover:bg-white/40 transition-colors"
                   style={{ gridTemplateColumns: "minmax(35px, 1.2fr) repeat(8, minmax(0, 1fr))" }}
                 >
-                  <div className="flex min-h-[50px] sm:min-h-[140px] items-center justify-center border-r border-white/40 bg-white/20 px-1 sm:px-3">
+                  <div className="flex h-[50px] sm:h-[140px] items-center justify-center border-r border-white/40 bg-white/20 px-1 sm:px-3">
                     <span className="hidden sm:block text-sm font-black text-[#1e3a8a] uppercase tracking-widest">{day}</span>
                     <span className="sm:hidden text-[8px] font-black text-[#1e3a8a] uppercase">{day.substring(0, 3)}</span>
                   </div>
@@ -791,7 +811,7 @@ export default function Timetable() {
                     const classes = getClasses(day, slot);
 
                     return (
-                      <div key={`${day}-${slot.key}`} className="min-h-[50px] sm:min-h-[140px] border-r border-white/40 p-0.5 sm:p-2 last:border-r-0 flex flex-col justify-center">
+                      <div key={`${day}-${slot.key}`} className="h-[50px] sm:h-[140px] border-r border-white/40 p-0.5 sm:p-2 last:border-r-0 flex flex-col justify-center">
                         {classes.length > 0 ? (
                           <div className="flex flex-col gap-1 sm:gap-2 h-full justify-center">
                             {classes.map((item, index) => (
@@ -810,7 +830,6 @@ export default function Timetable() {
               ))}
             </div>
           )}
-
           {/* UNMAPPED AMS CLASSES */}
           {unmappedRecords.length > 0 && (
             <div className="border-t border-amber-200/50 bg-amber-50/40 backdrop-blur-md p-5 sm:p-8">
@@ -830,7 +849,6 @@ export default function Timetable() {
             </div>
           )}
         </Section>
-
       </div>
     </div>
   );

@@ -47,22 +47,20 @@ export default function Navbar({ onMenuClick }) {
             className="group flex items-center gap-2 sm:gap-3 transition-transform active:scale-95 min-w-0"
             aria-label="UniEve AI home"
           >
-            <div className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-900/5 transition-all group-hover:shadow-md group-hover:ring-[#1e3a8a]/20 sm:h-10 sm:w-10">
+            {/* LOGO: Removed the text overlay, strictly showing the image */}
+            <div className="relative flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200 transition-all group-hover:shadow-md group-hover:ring-[#1e3a8a]/20">
               <img
                 src="/logo.png"
                 alt="UniEve AI"
-                className="h-4 w-4 object-contain transition-transform duration-500 group-hover:scale-110 sm:h-6 sm:w-6"
+                className="h-5 w-5 sm:h-6 sm:w-6 object-contain transition-transform duration-500 group-hover:scale-110"
                 onError={(event) => {
                   event.currentTarget.style.display = "none";
                 }}
               />
-              <span className="absolute text-[10px] font-black text-[#1e3a8a] sm:text-sm">
-                UA
-              </span>
             </div>
 
+            {/* TITLE: Kept exactly the same and visible on all screen sizes */}
             <div className="min-w-0">
-              {/* Uses Navy Blue to Cyan gradient from the logo hat */}
               <h1 className="bg-gradient-to-r from-[#1e3a8a] to-[#0ea5e9] bg-clip-text text-[15px] sm:text-lg font-black tracking-tight text-transparent whitespace-nowrap">
                 UniEve AI
               </h1>
@@ -105,7 +103,7 @@ export default function Navbar({ onMenuClick }) {
 
           <div className="hidden h-8 w-px bg-slate-200/70 sm:block" />
 
-          {/* Profile Badge (Navy to Cyan) */}
+          {/* Profile Badge */}
           <Link
             to="/profile"
             className="flex items-center gap-2 rounded-2xl p-1 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/20 active:scale-95 sm:gap-3 sm:p-1.5 sm:pr-3"
@@ -125,7 +123,7 @@ export default function Navbar({ onMenuClick }) {
             </div>
           </Link>
 
-          {/* Logout (Vel Tech Red Accent) */}
+          {/* Logout */}
           <button
             type="button"
             onClick={logout}

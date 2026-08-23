@@ -13,6 +13,9 @@ export const getTimetable = async () => {
 // =========================================================
 // SYNC TIMETABLE FROM AMS
 // =========================================================
+//
+// DO NOT CHANGE THIS WORKING ENDPOINT.
+// =========================================================
 
 export const syncTimetable = async () => {
   const response = await api.post("/timetable/sync");
@@ -21,234 +24,836 @@ export const syncTimetable = async () => {
 };
 
 // =========================================================
-// GET COMPLETE AMS STUDENT DETAILS
-// =========================================================
-//
-// AMS currently returns the student academic information
-// inside each object of response.data.
-//
-// Example:
-//
-// data[0] = {
-//   idNumber,
-//   studentName,
-//   rollNumber,
-//   degree,
-//   batch,
-//   regulation,
-//   semester,
-//   branch,
-//   bucket,
-//   ...
-// }
-//
-// Therefore:
-// - First timetable record -> student profile
-// - All timetable records -> timetable
-// - Unique subjectCode -> registered courses
-// - bucket -> student bucket
-//
+// HELPERS
 // =========================================================
 
-export const syncStudentAcademicDetails = async () => {
-  const response = await syncTimetable();
+const isObject = (value) =>
+  value !== null &&
+  typeof value === "object" &&
+  !Array.isArray(value);
 
-  const timetableData = Array.isArray(response?.data)
-    ? response.data
-    : [];
+const clean = (value) => {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "";
+  }
 
-  // =======================================================
-  // FIRST RECORD
-  // =======================================================
+  if (
+    typeof value === "object" ||
+    Array.isArray(value)
+  ) {
+    return "";
+  }
 
-  const firstRecord =
-    timetableData.length > 0
-      ? timetableData[0]
-      : {};
+  return String(value).trim();
+};
 
-  // =======================================================
-  // STUDENT PROFILE
-  // =======================================================
+const firstValue = (...values) => {
+  for (const value of values) {
+    if (clean(value)) {
+      return value;
+    }
+  }
 
-  const profile = {
-    idNumber:
-      firstRecord?.idNumber ??
-      response?.studentId ??
-      null,
+  return null;
+};
 
-    studentName:
-      firstRecord?.studentName ??
-      null,
+const normalizeKey = (value) =>
+  clean(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 
-    rollNumber:
-      firstRecord?.rollNumber ??
-      null,
+const findValue = (
+  source,
+  aliases,
+  maxDepth = 8
+) => {
+  if (
+    source === null ||
+    source === undefined ||
+    maxDepth < 0
+  ) {
+    return null;
+  }
 
-    degree:
-      firstRecord?.degree ??
-      null,
+  const aliasSet = new Set(
+    aliases.map(normalizeKey)
+  );
 
-    batch:
-      firstRecord?.batch ??
-      null,
+  const visited = new WeakSet();
 
-    regulation:
-      firstRecord?.regulation ??
-      null,
+  const search = (value, depth) => {
+    if (
+      value === null ||
+      value === undefined ||
+      depth < 0 ||
+      typeof value !== "object"
+    ) {
+      return null;
+    }
 
-    semester:
-      firstRecord?.semester ??
-      null,
+    if (visited.has(value)) {
+      return null;
+    }
 
-    branch:
-      firstRecord?.branch ??
-      null,
+    visited.add(value);
 
-    section:
-      firstRecord?.section ??
-      null,
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const result = search(
+          item,
+          depth - 1
+        );
 
-    bucket:
-      firstRecord?.bucket ??
-      null,
+        if (clean(result)) {
+          return result;
+        }
+      }
+
+      return null;
+    }
+
+    // ---------------------------------------------------
+    // Direct keys first
+    // ---------------------------------------------------
+
+    for (const [
+      key,
+      fieldValue,
+    ] of Object.entries(value)) {
+      if (
+        aliasSet.has(
+          normalizeKey(key)
+        ) &&
+        fieldValue !== null &&
+        fieldValue !== undefined &&
+        typeof fieldValue !== "object" &&
+        clean(fieldValue)
+      ) {
+        return fieldValue;
+      }
+    }
+
+    // ---------------------------------------------------
+    // Nested search
+    // ---------------------------------------------------
+
+    for (const fieldValue of Object.values(
+      value
+    )) {
+      if (
+        fieldValue &&
+        typeof fieldValue === "object"
+      ) {
+        const result = search(
+          fieldValue,
+          depth - 1
+        );
+
+        if (clean(result)) {
+          return result;
+        }
+      }
+    }
+
+    return null;
   };
 
-  // =======================================================
-  // BUCKET
-  // =======================================================
+  return search(
+    source,
+    maxDepth
+  );
+};
 
-  const bucket =
-    response?.bucket ??
-    firstRecord?.bucket ??
-    null;
+// =========================================================
+// EXTRACT ARRAY
+// =========================================================
 
-  // =======================================================
-  // REGISTERED COURSES
-  // =======================================================
-  //
-  // The same subject can appear multiple times because
-  // it can have multiple timetable periods.
-  //
-  // Example:
-  //
-  // Web and Mobile Application Development
-  // appears in multiple slots.
-  //
-  // We keep only one course entry for each subjectCode.
-  // =======================================================
+const findArray = (
+  source,
+  aliases,
+  maxDepth = 8
+) => {
+  if (
+    source === null ||
+    source === undefined ||
+    maxDepth < 0
+  ) {
+    return [];
+  }
 
+  const aliasSet = new Set(
+    aliases.map(normalizeKey)
+  );
+
+  const visited = new WeakSet();
+
+  const search = (value, depth) => {
+    if (
+      value === null ||
+      value === undefined ||
+      depth < 0 ||
+      typeof value !== "object"
+    ) {
+      return [];
+    }
+
+    if (visited.has(value)) {
+      return [];
+    }
+
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    // ---------------------------------------------------
+    // Search matching arrays first
+    // ---------------------------------------------------
+
+    for (const [
+      key,
+      fieldValue,
+    ] of Object.entries(value)) {
+      if (
+        aliasSet.has(
+          normalizeKey(key)
+        ) &&
+        Array.isArray(fieldValue)
+      ) {
+        return fieldValue;
+      }
+    }
+
+    // ---------------------------------------------------
+    // Nested search
+    // ---------------------------------------------------
+
+    for (const fieldValue of Object.values(
+      value
+    )) {
+      if (
+        fieldValue &&
+        typeof fieldValue === "object"
+      ) {
+        const result = search(
+          fieldValue,
+          depth - 1
+        );
+
+        if (result.length) {
+          return result;
+        }
+      }
+    }
+
+    return [];
+  };
+
+  return search(
+    source,
+    maxDepth
+  );
+};
+
+// =========================================================
+// EXTRACT TIMETABLE RECORDS
+// =========================================================
+//
+// The backend may return:
+//
+// data
+// timetable
+// records
+// timetableRecords
+// items
+//
+// Keep all supported forms.
+// =========================================================
+
+const extractTimetableRecords = (
+  response
+) => {
+  const records = findArray(
+    response,
+    [
+      "data",
+      "timetable",
+      "records",
+      "timetableRecords",
+      "timetable_records",
+      "items",
+      "rows",
+      "results",
+    ]
+  );
+
+  return Array.isArray(records)
+    ? records.filter(
+        (item) =>
+          item &&
+          typeof item === "object"
+      )
+    : [];
+};
+
+// =========================================================
+// COURSE FIELD HELPERS
+// =========================================================
+
+const getSubjectCode = (record) =>
+  firstValue(
+    record?.subjectCode,
+    record?.subject_code,
+    record?.courseCode,
+    record?.course_code,
+    record?.subjectId,
+    record?.subject_id,
+    record?.courseId,
+    record?.course_id,
+    findValue(record, [
+      "subjectCode",
+      "subject_code",
+      "courseCode",
+      "course_code",
+    ])
+  );
+
+const getSubjectName = (record) =>
+  firstValue(
+    record?.subjectName,
+    record?.subject_name,
+    record?.courseName,
+    record?.course_name,
+    record?.subject,
+    record?.course,
+    record?.courseTitle,
+    record?.course_title,
+    findValue(record, [
+      "subjectName",
+      "subject_name",
+      "courseName",
+      "course_name",
+      "subject",
+      "course",
+    ])
+  );
+
+const getFaculty = (record) =>
+  firstValue(
+    record?.faculty,
+    record?.facultyName,
+    record?.faculty_name,
+    record?.teacher,
+    record?.teacherName,
+    record?.teacher_name,
+    record?.staff,
+    record?.staffName,
+    record?.staff_name,
+    findValue(record, [
+      "faculty",
+      "facultyName",
+      "teacher",
+      "teacherName",
+      "staff",
+      "staffName",
+    ])
+  );
+
+const getFacultyId = (record) =>
+  firstValue(
+    record?.facultyId,
+    record?.faculty_id,
+    record?.staffId,
+    record?.staff_id,
+    record?.teacherId,
+    record?.teacher_id,
+    findValue(record, [
+      "facultyId",
+      "faculty_id",
+      "staffId",
+      "staff_id",
+      "teacherId",
+      "teacher_id",
+    ])
+  );
+
+const getCredits = (record) =>
+  firstValue(
+    record?.credit,
+    record?.credits,
+    record?.creditHours,
+    record?.credit_hours,
+    record?.courseCredits,
+    record?.course_credits,
+    findValue(record, [
+      "credit",
+      "credits",
+      "creditHours",
+      "courseCredits",
+    ])
+  );
+
+const getCategory = (record) =>
+  firstValue(
+    record?.category,
+    record?.courseCategory,
+    record?.course_category,
+    record?.courseType,
+    record?.course_type,
+    record?.type,
+    findValue(record, [
+      "category",
+      "courseCategory",
+      "courseType",
+      "type",
+    ])
+  );
+
+const getSlot = (record) =>
+  firstValue(
+    record?.slot,
+    record?.slotName,
+    record?.slot_name,
+    record?.timeSlot,
+    record?.time_slot,
+    record?.period,
+    record?.periodName,
+    record?.period_name,
+    findValue(record, [
+      "slot",
+      "slotName",
+      "timeSlot",
+      "period",
+    ])
+  );
+
+const getRoom = (record) =>
+  firstValue(
+    record?.room,
+    record?.roomNo,
+    record?.room_no,
+    record?.roomNumber,
+    record?.room_number,
+    record?.classroom,
+    findValue(record, [
+      "room",
+      "roomNo",
+      "roomNumber",
+      "classroom",
+    ])
+  );
+
+// =========================================================
+// BUILD COURSES
+// =========================================================
+
+const buildCourses = (
+  timetableData
+) => {
   const courseMap = new Map();
 
-  timetableData.forEach((record) => {
-    if (!record || typeof record !== "object") {
-      return;
+  for (const record of timetableData) {
+    if (
+      !record ||
+      typeof record !== "object"
+    ) {
+      continue;
     }
 
     const subjectCode =
-      record?.subjectCode ||
-      record?.subjectId ||
-      record?.courseCode;
+      getSubjectCode(record);
 
     const subjectName =
-      record?.courseName ||
-      record?.subjectName ||
-      record?.subject;
+      getSubjectName(record);
 
-    // Ignore records which don't contain course data.
-    if (!subjectCode && !subjectName) {
-      return;
+    if (
+      !subjectCode &&
+      !subjectName
+    ) {
+      continue;
     }
 
-    const courseKey =
+    const key = (
       subjectCode ||
-      subjectName;
+      subjectName ||
+      ""
+    )
+      .toString()
+      .trim()
+      .toUpperCase();
 
-    if (!courseMap.has(courseKey)) {
-      courseMap.set(courseKey, {
-        subjectId:
-          record?.subjectId ??
-          null,
-
-        subjectCode:
-          record?.subjectCode ??
-          record?.courseCode ??
-          null,
-
-        subjectName:
-          subjectName ??
-          null,
-
-        courseName:
-          record?.courseName ??
-          record?.subjectName ??
-          null,
-
-        faculty:
-          record?.faculty ??
-          null,
-
-        facultyId:
-          record?.facultyId ??
-          null,
-
-        category:
-          record?.category ??
-          null,
-
-        credit:
-          record?.credit ??
-          null,
-      });
+    if (!key) {
+      continue;
     }
-  });
 
-  const courses = Array.from(
+    const existing =
+      courseMap.get(key);
+
+    // ---------------------------------------------------
+    // First occurrence
+    // ---------------------------------------------------
+
+    if (!existing) {
+      courseMap.set(
+        key,
+        {
+          subjectId: firstValue(
+            record?.subjectId,
+            record?.subject_id
+          ),
+
+          subjectCode,
+
+          subjectName,
+
+          courseName: firstValue(
+            record?.courseName,
+            record?.course_name,
+            subjectName
+          ),
+
+          faculty:
+            getFaculty(record),
+
+          facultyId:
+            getFacultyId(record),
+
+          category:
+            getCategory(record),
+
+          credit:
+            getCredits(record),
+
+          slot:
+            getSlot(record),
+
+          room:
+            getRoom(record),
+        }
+      );
+
+      continue;
+    }
+
+    // ---------------------------------------------------
+    // Fill missing fields from later timetable rows
+    // ---------------------------------------------------
+
+    existing.subjectId =
+      firstValue(
+        existing.subjectId,
+        record?.subjectId,
+        record?.subject_id
+      );
+
+    existing.subjectCode =
+      firstValue(
+        existing.subjectCode,
+        subjectCode
+      );
+
+    existing.subjectName =
+      firstValue(
+        existing.subjectName,
+        subjectName
+      );
+
+    existing.courseName =
+      firstValue(
+        existing.courseName,
+        record?.courseName,
+        record?.course_name,
+        subjectName
+      );
+
+    existing.faculty =
+      firstValue(
+        existing.faculty,
+        getFaculty(record)
+      );
+
+    existing.facultyId =
+      firstValue(
+        existing.facultyId,
+        getFacultyId(record)
+      );
+
+    existing.category =
+      firstValue(
+        existing.category,
+        getCategory(record)
+      );
+
+    existing.credit =
+      firstValue(
+        existing.credit,
+        getCredits(record)
+      );
+
+    existing.slot =
+      firstValue(
+        existing.slot,
+        getSlot(record)
+      );
+
+    existing.room =
+      firstValue(
+        existing.room,
+        getRoom(record)
+      );
+  }
+
+  return Array.from(
     courseMap.values()
   );
+};
 
-  // =======================================================
-  // RETURN NORMALIZED DATA
-  // =======================================================
+// =========================================================
+// GET STUDENT PROFILE FROM TIMETABLE RESPONSE
+// =========================================================
+
+const buildAcademicProfile = (
+  response,
+  records
+) => {
+  const firstRecord =
+    records[0] || {};
 
   return {
-    success:
-      response?.success ?? false,
+    idNumber: firstValue(
+      findValue(response, [
+        "idNumber",
+        "id_number",
+        "studentId",
+        "student_id",
+      ]),
+      firstValue(
+        firstRecord?.idNumber,
+        firstRecord?.studentId
+      )
+    ),
 
-    message:
-      response?.message ?? null,
+    studentName: firstValue(
+      findValue(response, [
+        "studentName",
+        "student_name",
+        "name",
+        "fullName",
+      ]),
+      firstValue(
+        firstRecord?.studentName,
+        firstRecord?.name
+      )
+    ),
 
-    studentId:
-      response?.studentId ??
-      firstRecord?.studentId ??
-      null,
+    rollNumber: firstValue(
+      findValue(response, [
+        "rollNumber",
+        "roll_number",
+        "rollNo",
+        "roll_no",
+      ]),
+      firstRecord?.rollNumber
+    ),
 
-    username:
-      response?.username ??
-      firstRecord?.idNumber ??
-      null,
+    degree: firstValue(
+      findValue(response, [
+        "degree",
+        "degreeName",
+        "degree_name",
+        "program",
+        "programme",
+      ]),
+      firstRecord?.degree
+    ),
 
-    profile,
+    batch: firstValue(
+      findValue(response, [
+        "batch",
+        "batchName",
+        "batch_name",
+        "academicBatch",
+      ]),
+      firstRecord?.batch
+    ),
 
-    bucket,
+    regulation: firstValue(
+      findValue(response, [
+        "regulation",
+        "regulationName",
+        "regulation_name",
+      ]),
+      firstRecord?.regulation
+    ),
 
-    courses,
+    semester: firstValue(
+      findValue(response, [
+        "semester",
+        "semesterName",
+        "semester_name",
+        "sem",
+      ]),
+      firstRecord?.semester
+    ),
 
-    timetable: timetableData,
+    branch: firstValue(
+      findValue(response, [
+        "branch",
+        "branchName",
+        "branch_name",
+        "department",
+        "departmentName",
+      ]),
+      firstRecord?.branch
+    ),
 
-    total:
-      response?.total ??
-      timetableData.length,
+    section: firstValue(
+      findValue(response, [
+        "section",
+        "sectionName",
+        "section_name",
+        "division",
+      ]),
+      firstRecord?.section
+    ),
 
-    inserted:
-      response?.inserted ??
-      0,
-
-    updated:
-      response?.updated ??
-      0,
-
-    deactivated:
-      response?.deactivated ??
-      0,
+    bucket: firstValue(
+      findValue(response, [
+        "bucket",
+        "bucketName",
+        "bucket_name",
+        "bucketCode",
+        "yourBucket",
+        "academicBucket",
+        "studentBucket",
+      ]),
+      firstRecord?.bucket
+    ),
   };
 };
+
+// =========================================================
+// COMPLETE AMS ACADEMIC DETAILS
+// =========================================================
+//
+// IMPORTANT:
+//
+// This still uses the EXISTING timetable sync endpoint.
+// No AMS authentication/scraping code is changed.
+//
+// =========================================================
+
+export const syncStudentAcademicDetails =
+  async () => {
+    const response =
+      await syncTimetable();
+
+    // ---------------------------------------------------
+    // Preserve the original response
+    // ---------------------------------------------------
+
+    const timetableData =
+      extractTimetableRecords(
+        response
+      );
+
+    // ---------------------------------------------------
+    // Academic profile
+    // ---------------------------------------------------
+
+    const profile =
+      buildAcademicProfile(
+        response,
+        timetableData
+      );
+
+    // ---------------------------------------------------
+    // Bucket
+    // ---------------------------------------------------
+
+    const bucket =
+      firstValue(
+        findValue(response, [
+          "bucket",
+          "bucketName",
+          "bucket_name",
+          "bucketCode",
+          "yourBucket",
+          "your_bucket",
+          "academicBucket",
+          "academic_bucket",
+          "studentBucket",
+          "student_bucket",
+        ]),
+        profile.bucket
+      );
+
+    // ---------------------------------------------------
+    // Courses
+    // ---------------------------------------------------
+
+    const courses =
+      buildCourses(
+        timetableData
+      );
+
+    // ---------------------------------------------------
+    // Return
+    // ---------------------------------------------------
+
+    return {
+      success:
+        response?.success ??
+        true,
+
+      message:
+        response?.message ??
+        null,
+
+      studentId:
+        firstValue(
+          response?.studentId,
+          response?.student_id,
+          profile.idNumber
+        ),
+
+      username:
+        firstValue(
+          response?.username,
+          response?.portalUsername,
+          profile.idNumber
+        ),
+
+      profile: {
+        ...profile,
+        bucket,
+      },
+
+      bucket,
+
+      courses,
+
+      timetable:
+        timetableData,
+
+      total:
+        response?.total ??
+        timetableData.length,
+
+      inserted:
+        response?.inserted ??
+        0,
+
+      updated:
+        response?.updated ??
+        0,
+
+      deactivated:
+        response?.deactivated ??
+        0,
+    };
+  };

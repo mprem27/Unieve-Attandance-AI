@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # =========================================================
@@ -8,43 +8,17 @@ from pydantic import BaseModel
 # =========================================================
 
 class NotificationPublic(BaseModel):
-    """
-    Public notification response returned to the frontend.
-
-    Sensitive internal information is not exposed here.
-    """
-
-    # =====================================================
-    # IDENTIFICATION
-    # =====================================================
-
     id: str
 
     studentId: str
 
-    # =====================================================
-    # SUBJECT
-    # =====================================================
-
     subjectId: str | None = None
-
     subjectName: str | None = None
-
     subjectCode: str | None = None
 
-    # =====================================================
-    # ATTENDANCE
-    # =====================================================
-
     date: str | None = None
-
     attendanceStatus: str | None = None
-
     attendancePercentage: float | None = None
-
-    # =====================================================
-    # NOTIFICATION
-    # =====================================================
 
     type: str
 
@@ -56,25 +30,13 @@ class NotificationPublic(BaseModel):
 
     read: bool = False
 
-    # =====================================================
-    # SMS
-    # =====================================================
-
     smsStatus: str = "NOT_REQUIRED"
 
     smsMessageId: str | None = None
 
     smsSentAt: datetime | None = None
 
-    # =====================================================
-    # SOURCE
-    # =====================================================
-
     source: str = "system"
-
-    # =====================================================
-    # TIMESTAMPS
-    # =====================================================
 
     createdAt: datetime
 
@@ -86,11 +48,57 @@ class NotificationPublic(BaseModel):
 # =========================================================
 
 class MarkReadResponse(BaseModel):
-    """
-    Response returned after marking one notification
-    as read.
-    """
-
     id: str
 
     read: bool
+
+
+# =========================================================
+# PUSH SUBSCRIPTION KEYS
+# =========================================================
+
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str = Field(
+        ...,
+        min_length=1,
+    )
+
+    auth: str = Field(
+        ...,
+        min_length=1,
+    )
+
+
+# =========================================================
+# CREATE PUSH SUBSCRIPTION
+# =========================================================
+
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str = Field(
+        ...,
+        min_length=1,
+    )
+
+    keys: PushSubscriptionKeys
+
+
+# =========================================================
+# PUSH SUBSCRIPTION RESPONSE
+# =========================================================
+
+class PushSubscriptionResponse(BaseModel):
+    success: bool
+
+    message: str
+
+
+# =========================================================
+# PUSH NOTIFICATION STATUS
+# =========================================================
+
+class PushNotificationStatus(BaseModel):
+    success: bool
+
+    enabled: bool
+
+    subscriptions: int

@@ -5,24 +5,22 @@ from app.config.database import get_db
 from app.schemas.notification import (
     MarkReadResponse,
     NotificationPublic,
+    PushNotificationStatus,
+    PushSubscriptionCreate,
+    PushSubscriptionResponse,
 )
 from app.security.permissions import get_current_user
 from app.services.notification_service import NotificationService
+from app.services.push_notification_service import (
+    PushNotificationService,
+)
 
-
-# =========================================================
-# ROUTER
-# =========================================================
 
 router = APIRouter(
     prefix="/notifications",
     tags=["notifications"],
 )
 
-
-# =========================================================
-# LIST NOTIFICATIONS
-# =========================================================
 
 @router.get(
     "",
@@ -34,23 +32,12 @@ def list_notifications(
     ),
     db: Database = Depends(get_db),
 ):
-    """
-    Return notifications belonging only to the
-    authenticated user.
-
-    Newest notifications are returned first.
-    """
-
     return NotificationService(
         db
     ).list_notifications(
         current_user["id"]
     )
 
-
-# =========================================================
-# UNREAD NOTIFICATION COUNT
-# =========================================================
 
 @router.get(
     "/unread-count",
@@ -61,11 +48,6 @@ def unread_notification_count(
     ),
     db: Database = Depends(get_db),
 ):
-    """
-    Return the number of unread notifications
-    belonging to the authenticated user.
-    """
-
     count = NotificationService(
         db
     ).get_unread_count(
@@ -78,9 +60,110 @@ def unread_notification_count(
     }
 
 
-# =========================================================
-# MARK ONE NOTIFICATION AS READ
-# =========================================================
+@router.patch(
+    "/read-all",
+)
+def mark_all_read(
+    current_user: dict = Depends(
+        get_current_user
+    ),
+    db: Database = Depends(get_db),
+):
+    modified_count = NotificationService(
+        db
+    ).mark_all_read(
+        current_user["id"]
+    )
+
+    return {
+        "success": True,
+        "message": (
+            "All notifications marked as read."
+        ),
+        "modified": modified_count,
+    }
+
+
+@router.post(
+    "/subscribe",
+    response_model=PushSubscriptionResponse,
+)
+def subscribe_push(
+    payload: PushSubscriptionCreate,
+    current_user: dict = Depends(
+        get_current_user
+    ),
+    db: Database = Depends(get_db),
+):
+    return PushNotificationService(
+        db
+    ).subscribe(
+        current_user["id"],
+        payload,
+    )
+
+
+@router.delete(
+    "/unsubscribe",
+    response_model=PushSubscriptionResponse,
+)
+def unsubscribe_push(
+    payload: dict,
+    current_user: dict = Depends(
+        get_current_user
+    ),
+    db: Database = Depends(get_db),
+):
+    endpoint = str(
+        payload.get("endpoint") or ""
+    ).strip()
+
+    if not endpoint:
+        raise HTTPException(
+            status_code=400,
+            detail="Push endpoint is required.",
+        )
+
+    return PushNotificationService(
+        db
+    ).unsubscribe(
+        current_user["id"],
+        endpoint,
+    )
+
+
+@router.get(
+    "/status",
+    response_model=PushNotificationStatus,
+)
+def push_status(
+    current_user: dict = Depends(
+        get_current_user
+    ),
+    db: Database = Depends(get_db),
+):
+    return PushNotificationService(
+        db
+    ).get_status(
+        current_user["id"]
+    )
+
+
+@router.post(
+    "/test",
+)
+def test_push(
+    current_user: dict = Depends(
+        get_current_user
+    ),
+    db: Database = Depends(get_db),
+):
+    return PushNotificationService(
+        db
+    ).send_test(
+        current_user["id"]
+    )
+
 
 @router.patch(
     "/{notification_id}/read",
@@ -93,12 +176,6 @@ def mark_read(
     ),
     db: Database = Depends(get_db),
 ):
-    """
-    Mark one notification as read.
-
-    A user can only modify their own notification.
-    """
-
     result = NotificationService(
         db
     ).mark_read(
@@ -115,43 +192,6 @@ def mark_read(
     return result
 
 
-# =========================================================
-# MARK ALL NOTIFICATIONS AS READ
-# =========================================================
-
-@router.patch(
-    "/read-all",
-)
-def mark_all_read(
-    current_user: dict = Depends(
-        get_current_user
-    ),
-    db: Database = Depends(get_db),
-):
-    """
-    Mark all unread notifications belonging to
-    the authenticated user as read.
-    """
-
-    modified_count = NotificationService(
-        db
-    ).mark_all_read(
-        current_user["id"]
-    )
-
-    return {
-        "success": True,
-        "message": (
-            "All notifications marked as read."
-        ),
-        "modified": modified_count,
-    }
-
-
-# =========================================================
-# DELETE NOTIFICATION
-# =========================================================
-
 @router.delete(
     "/{notification_id}",
 )
@@ -162,11 +202,6 @@ def delete_notification(
     ),
     db: Database = Depends(get_db),
 ):
-    """
-    Delete one notification belonging to the
-    authenticated user.
-    """
-
     deleted = NotificationService(
         db
     ).delete_notification(

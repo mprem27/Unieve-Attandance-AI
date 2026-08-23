@@ -11,7 +11,7 @@ export default defineConfig({
 
       manifest: {
         name: "UniEve AI",
-        short_name: "UniEve",
+        short_name: "UniEve AI",
         description:
           "Smart Subject-Wise Attendance Monitoring and Alert System",
 

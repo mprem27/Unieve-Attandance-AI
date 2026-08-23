@@ -107,95 +107,32 @@ const FG_ANIMS = [
 // =====================================================
 // BACKGROUND ANIMATION
 // =====================================================
-//
-// IMPORTANT PERFORMANCE CHANGE:
-//
-// Login and Forgot Password pages do NOT render the
-// expensive animated SVG background.
-//
-// Dashboard/admin pages continue using the existing
-// animation.
-//
-// =====================================================
 
 function BackgroundAnimation() {
-  const location = useLocation();
-
-  const isPublicPage =
-    location.pathname === "/login" ||
-    location.pathname === "/forgot-password";
-
   const [bgElements, setBgElements] = useState([]);
   const [fgElements, setFgElements] = useState([]);
 
   useEffect(() => {
-    if (isPublicPage) {
-      setBgElements([]);
-      setFgElements([]);
-      return;
-    }
+    const isMobile = window.innerWidth < 640;
 
-    const isMobile =
-      window.innerWidth < 640;
-
-    // Reduced slightly for better performance.
-    // Existing visual effect is preserved.
+    // Set element counts based on device size
     const bgCount = isMobile ? 20 : 35;
     const fgCount = isMobile ? 3 : 5;
 
-    const generateElements = (
-      count,
-      isForeground
-    ) => {
+    const generateElements = (count, isForeground) => {
       const arr = [];
 
-      for (
-        let i = 0;
-        i < count;
-        i++
-      ) {
-        const icon =
-          ICONS[
-            Math.floor(
-              Math.random() *
-                ICONS.length
-            )
-          ];
-
-        const color =
-          COLORS[
-            Math.floor(
-              Math.random() *
-                COLORS.length
-            )
-          ];
-
-        const left =
-          Math.random() * 100 + "%";
+      for (let i = 0; i < count; i++) {
+        const icon = ICONS[Math.floor(Math.random() * ICONS.length)];
+        const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+        const left = Math.random() * 100 + "%";
 
         if (isForeground) {
-          const size =
-            60 +
-            Math.random() * 40;
-
-          const opacity =
-            0.04 +
-            Math.random() * 0.04;
-
-          const dur =
-            60 +
-            Math.random() * 60;
-
-          const delay =
-            -(Math.random() * dur);
-
-          const anim =
-            FG_ANIMS[
-              Math.floor(
-                Math.random() *
-                  FG_ANIMS.length
-              )
-            ];
+          const size = 60 + Math.random() * 40;
+          const opacity = 0.04 + Math.random() * 0.04;
+          const dur = 60 + Math.random() * 60;
+          const delay = -(Math.random() * dur);
+          const anim = FG_ANIMS[Math.floor(Math.random() * FG_ANIMS.length)];
 
           arr.push({
             id: i,
@@ -210,31 +147,12 @@ function BackgroundAnimation() {
             delay,
           });
         } else {
-          const size =
-            25 +
-            Math.random() * 25;
-
-          const opacity =
-            0.3 +
-            Math.random() * 0.4;
-
-          const top =
-            Math.random() * 100 + "%";
-
-          const dur =
-            25 +
-            Math.random() * 20;
-
-          const delay =
-            -Math.random() * dur;
-
-          const anim =
-            BG_ANIMS[
-              Math.floor(
-                Math.random() *
-                  BG_ANIMS.length
-              )
-            ];
+          const size = 25 + Math.random() * 25;
+          const opacity = 0.3 + Math.random() * 0.4;
+          const top = Math.random() * 100 + "%";
+          const dur = 25 + Math.random() * 20;
+          const delay = -Math.random() * dur;
+          const anim = BG_ANIMS[Math.floor(Math.random() * BG_ANIMS.length)];
 
           arr.push({
             id: i,
@@ -254,33 +172,14 @@ function BackgroundAnimation() {
       return arr;
     };
 
-    setBgElements(
-      generateElements(
-        bgCount,
-        false
-      )
-    );
-
-    setFgElements(
-      generateElements(
-        fgCount,
-        true
-      )
-    );
+    setBgElements(generateElements(bgCount, false));
+    setFgElements(generateElements(fgCount, true));
 
     return () => {
       setBgElements([]);
       setFgElements([]);
     };
-  }, [isPublicPage]);
-
-  // -----------------------------------------------------
-  // Do not render animation on authentication pages.
-  // -----------------------------------------------------
-
-  if (isPublicPage) {
-    return null;
-  }
+  }, []); // Run ONCE unconditionally so it persists and animates everywhere
 
   return (
     <>
@@ -310,164 +209,102 @@ function BackgroundAnimation() {
 
             @keyframes driftA {
               0%, 100% {
-                transform:
-                  translate(0, 0)
-                  rotate(0deg)
-                  scale(1);
+                transform: translate(0, 0) rotate(0deg) scale(1);
               }
-
               50% {
-                transform:
-                  translate(30px, -60px)
-                  rotate(15deg)
-                  scale(1.05);
+                transform: translate(30px, -60px) rotate(15deg) scale(1.05);
               }
             }
 
             @keyframes driftB {
               0%, 100% {
-                transform:
-                  translate(0, 0)
-                  rotate(0deg)
-                  scale(1);
+                transform: translate(0, 0) rotate(0deg) scale(1);
               }
-
               50% {
-                transform:
-                  translate(-35px, -50px)
-                  rotate(-12deg)
-                  scale(0.95);
+                transform: translate(-35px, -50px) rotate(-12deg) scale(0.95);
               }
             }
 
             @keyframes driftC {
               0%, 100% {
-                transform:
-                  translate(0, 0)
-                  rotate(0deg)
-                  scale(1);
+                transform: translate(0, 0) rotate(0deg) scale(1);
               }
-
               33% {
-                transform:
-                  translate(25px, -30px)
-                  rotate(8deg)
-                  scale(1.04);
+                transform: translate(25px, -30px) rotate(8deg) scale(1.04);
               }
-
               66% {
-                transform:
-                  translate(-20px, -60px)
-                  rotate(-8deg)
-                  scale(0.96);
+                transform: translate(-20px, -60px) rotate(-8deg) scale(0.96);
               }
             }
 
             @keyframes driftD {
               0%, 100% {
-                transform:
-                  translate(0, 0)
-                  rotate(0deg)
-                  scale(1);
+                transform: translate(0, 0) rotate(0deg) scale(1);
               }
-
               50% {
-                transform:
-                  translate(0px, -80px)
-                  rotate(20deg)
-                  scale(1.1);
+                transform: translate(0px, -80px) rotate(20deg) scale(1.1);
               }
             }
 
             @keyframes fgFloat1 {
               0% {
-                transform:
-                  translateY(110vh)
-                  rotate(0deg);
+                transform: translateY(110vh) rotate(0deg);
                 opacity: 0;
               }
-
               2% {
                 opacity: var(--max-opacity);
               }
-
               8% {
                 opacity: var(--max-opacity);
               }
-
               10% {
-                transform:
-                  translateY(-110vh)
-                  rotate(45deg);
+                transform: translateY(-110vh) rotate(45deg);
                 opacity: 0;
               }
-
               100% {
-                transform:
-                  translateY(-110vh)
-                  rotate(45deg);
+                transform: translateY(-110vh) rotate(45deg);
                 opacity: 0;
               }
             }
 
             @keyframes fgFloat2 {
               0% {
-                transform:
-                  translate(-20vw, 110vh)
-                  rotate(0deg);
+                transform: translate(-20vw, 110vh) rotate(0deg);
                 opacity: 0;
               }
-
               2% {
                 opacity: var(--max-opacity);
               }
-
               8% {
                 opacity: var(--max-opacity);
               }
-
               10% {
-                transform:
-                  translate(20vw, -110vh)
-                  rotate(-30deg);
+                transform: translate(20vw, -110vh) rotate(-30deg);
                 opacity: 0;
               }
-
               100% {
-                transform:
-                  translate(20vw, -110vh)
-                  rotate(-30deg);
+                transform: translate(20vw, -110vh) rotate(-30deg);
                 opacity: 0;
               }
             }
 
             @keyframes fgFloat3 {
               0% {
-                transform:
-                  translate(20vw, 110vh)
-                  rotate(0deg);
+                transform: translate(20vw, 110vh) rotate(0deg);
                 opacity: 0;
               }
-
               2% {
                 opacity: var(--max-opacity);
               }
-
               8% {
                 opacity: var(--max-opacity);
               }
-
               10% {
-                transform:
-                  translate(-20vw, -110vh)
-                  rotate(60deg);
+                transform: translate(-20vw, -110vh) rotate(60deg);
                 opacity: 0;
               }
-
               100% {
-                transform:
-                  translate(-20vw, -110vh)
-                  rotate(60deg);
+                transform: translate(-20vw, -110vh) rotate(60deg);
                 opacity: 0;
               }
             }
@@ -484,77 +321,58 @@ function BackgroundAnimation() {
       {/* =================================================
           BACKGROUND LAYER
       ================================================= */}
-
       <div
         className="floating-bg"
-        style={{
-          zIndex: 0,
-        }}
+        style={{ zIndex: 0 }}
         aria-hidden="true"
       >
-        {bgElements.map(
-          (el) => (
-            <div
-              key={`bg-${el.id}`}
-              className="float-icon"
-              style={{
-                width: `${el.size}px`,
-                height: `${el.size}px`,
-                left: el.left,
-                top: el.top,
-                color: el.color,
-                opacity:
-                  el.opacity.toFixed(
-                    2
-                  ),
-                animation:
-                  `${el.anim} ${el.dur}s ${el.delay}s infinite ease-in-out`,
-              }}
-              dangerouslySetInnerHTML={{
-                __html: el.icon,
-              }}
-            />
-          )
-        )}
+        {bgElements.map((el) => (
+          <div
+            key={`bg-${el.id}`}
+            className="float-icon"
+            style={{
+              width: `${el.size}px`,
+              height: `${el.size}px`,
+              left: el.left,
+              top: el.top,
+              color: el.color,
+              opacity: el.opacity.toFixed(2),
+              animation: `${el.anim} ${el.dur}s ${el.delay}s infinite ease-in-out`,
+            }}
+            dangerouslySetInnerHTML={{
+              __html: el.icon,
+            }}
+          />
+        ))}
       </div>
 
       {/* =================================================
           FOREGROUND LAYER
-          Reduced z-index so it never sits above UI.
       ================================================= */}
-
       <div
         className="floating-bg"
-        style={{
-          zIndex: 0,
-        }}
+        style={{ zIndex: 0 }}
         aria-hidden="true"
       >
-        {fgElements.map(
-          (el) => (
-            <div
-              key={`fg-${el.id}`}
-              className="float-icon"
-              style={{
-                width: `${el.size}px`,
-                height: `${el.size}px`,
-                left: el.left,
-                top: el.top,
-                color: el.color,
-                "--max-opacity":
-                  el.opacity.toFixed(
-                    3
-                  ),
-                opacity: 0,
-                animation:
-                  `${el.anim} ${el.dur}s ${el.delay}s infinite linear`,
-              }}
-              dangerouslySetInnerHTML={{
-                __html: el.icon,
-              }}
-            />
-          )
-        )}
+        {fgElements.map((el) => (
+          <div
+            key={`fg-${el.id}`}
+            className="float-icon"
+            style={{
+              width: `${el.size}px`,
+              height: `${el.size}px`,
+              left: el.left,
+              top: el.top,
+              color: el.color,
+              "--max-opacity": el.opacity.toFixed(3),
+              opacity: 0,
+              animation: `${el.anim} ${el.dur}s ${el.delay}s infinite linear`,
+            }}
+            dangerouslySetInnerHTML={{
+              __html: el.icon,
+            }}
+          />
+        ))}
       </div>
     </>
   );
@@ -564,16 +382,9 @@ function BackgroundAnimation() {
 // DASHBOARD LAYOUT
 // =====================================================
 
-function DashboardLayout({
-  children,
-}) {
-  const [
-    isSidebarOpen,
-    setIsSidebarOpen,
-  ] = useState(false);
-
-  const location =
-    useLocation();
+function DashboardLayout({ children }) {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     setIsSidebarOpen(false);
@@ -581,28 +392,19 @@ function DashboardLayout({
 
   return (
     <div className="min-h-screen font-sans text-slate-800 antialiased bg-transparent selection:bg-indigo-100 selection:text-indigo-900">
-
       <Sidebar
-        isOpen={
-          isSidebarOpen
-        }
-        onClose={() =>
-          setIsSidebarOpen(false)
-        }
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
 
       <div className="flex min-h-screen flex-col transition-all duration-300 lg:pl-72">
-
         <Navbar
-          onMenuClick={() =>
-            setIsSidebarOpen(true)
-          }
+          onMenuClick={() => setIsSidebarOpen(true)}
         />
 
         <main className="min-w-0 flex-1 relative z-10 animate-[fadeIn_0.4s_ease-out_forwards]">
           {children}
         </main>
-
       </div>
     </div>
   );
@@ -621,9 +423,7 @@ export default function App() {
             @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0');
 
             .material-symbols-outlined {
-              font-family:
-                'Material Symbols Outlined' !important;
-
+              font-family: 'Material Symbols Outlined' !important;
               font-weight: normal;
               font-style: normal;
               font-size: 24px;
@@ -634,12 +434,8 @@ export default function App() {
               white-space: nowrap;
               word-wrap: normal;
               direction: ltr;
-
-              -webkit-font-feature-settings:
-                'liga';
-
-              -webkit-font-smoothing:
-                antialiased;
+              -webkit-font-feature-settings: 'liga';
+              -webkit-font-smoothing: antialiased;
             }
 
             body,
@@ -653,14 +449,11 @@ export default function App() {
             @keyframes fadeIn {
               from {
                 opacity: 0;
-                transform:
-                  translateY(10px);
+                transform: translateY(10px);
               }
-
               to {
                 opacity: 1;
-                transform:
-                  translateY(0);
+                transform: translateY(0);
               }
             }
           `,
@@ -668,39 +461,25 @@ export default function App() {
       />
 
       {/* =================================================
-          GLOBAL BACKGROUND
+          GLOBAL BACKGROUND (NOW VISIBLE EVERYWHERE)
       ================================================= */}
-
       <BackgroundAnimation />
 
       {/* =================================================
           ROUTING
       ================================================= */}
-
       <div className="relative z-10">
-
         <Routes>
 
           {/* =================================================
               PUBLIC
           ================================================= */}
-
-          <Route
-            path="/login"
-            element={<Login />}
-          />
-
-          <Route
-            path="/forgot-password"
-            element={
-              <ForgotPassword />
-            }
-          />
+          <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
 
           {/* =================================================
               STUDENT - DASHBOARD
           ================================================= */}
-
           <Route
             path="/dashboard"
             element={
@@ -715,7 +494,6 @@ export default function App() {
           {/* =================================================
               STUDENT - ATTENDANCE
           ================================================= */}
-
           <Route
             path="/attendance"
             element={
@@ -741,7 +519,6 @@ export default function App() {
           {/* =================================================
               STUDENT - TIMETABLE
           ================================================= */}
-
           <Route
             path="/timetable"
             element={
@@ -756,7 +533,6 @@ export default function App() {
           {/* =================================================
               STUDENT - NOTIFICATIONS
           ================================================= */}
-
           <Route
             path="/notifications"
             element={
@@ -771,7 +547,6 @@ export default function App() {
           {/* =================================================
               STUDENT - PROFILE
           ================================================= */}
-
           <Route
             path="/profile"
             element={
@@ -786,7 +561,6 @@ export default function App() {
           {/* =================================================
               STUDENT - CHANGE PASSWORD
           ================================================= */}
-
           <Route
             path="/change-password"
             element={
@@ -801,15 +575,10 @@ export default function App() {
           {/* =================================================
               ADMIN
           ================================================= */}
-
           <Route
             path="/admin"
             element={
-              <ProtectedRoute
-                allowedRoles={[
-                  "admin",
-                ]}
-              >
+              <ProtectedRoute allowedRoles={["admin"]}>
                 <DashboardLayout>
                   <AdminDashboard />
                 </DashboardLayout>
@@ -820,11 +589,7 @@ export default function App() {
           <Route
             path="/admin/users"
             element={
-              <ProtectedRoute
-                allowedRoles={[
-                  "admin",
-                ]}
-              >
+              <ProtectedRoute allowedRoles={["admin"]}>
                 <DashboardLayout>
                   <Users />
                 </DashboardLayout>
@@ -835,11 +600,7 @@ export default function App() {
           <Route
             path="/admin/users/:userId"
             element={
-              <ProtectedRoute
-                allowedRoles={[
-                  "admin",
-                ]}
-              >
+              <ProtectedRoute allowedRoles={["admin"]}>
                 <DashboardLayout>
                   <UserDetails />
                 </DashboardLayout>
@@ -850,11 +611,7 @@ export default function App() {
           <Route
             path="/admin/users/:userId/edit"
             element={
-              <ProtectedRoute
-                allowedRoles={[
-                  "admin",
-                ]}
-              >
+              <ProtectedRoute allowedRoles={["admin"]}>
                 <DashboardLayout>
                   <EditUser />
                 </DashboardLayout>
@@ -865,11 +622,7 @@ export default function App() {
           <Route
             path="/admin/sync-status"
             element={
-              <ProtectedRoute
-                allowedRoles={[
-                  "admin",
-                ]}
-              >
+              <ProtectedRoute allowedRoles={["admin"]}>
                 <DashboardLayout>
                   <SyncStatus />
                 </DashboardLayout>
@@ -880,11 +633,7 @@ export default function App() {
           <Route
             path="/admin/sms-logs"
             element={
-              <ProtectedRoute
-                allowedRoles={[
-                  "admin",
-                ]}
-              >
+              <ProtectedRoute allowedRoles={["admin"]}>
                 <DashboardLayout>
                   <SMSLogs />
                 </DashboardLayout>
@@ -895,29 +644,10 @@ export default function App() {
           {/* =================================================
               FALLBACK
           ================================================= */}
-
-          <Route
-            path="/"
-            element={
-              <Navigate
-                to="/dashboard"
-                replace
-              />
-            }
-          />
-
-          <Route
-            path="*"
-            element={
-              <Navigate
-                to="/dashboard"
-                replace
-              />
-            }
-          />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
 
         </Routes>
-
       </div>
     </>
   );
